@@ -4,7 +4,8 @@ import random
 
 import settings
 
-import itertools
+from .utils import StateSpace
+
 import numpy as np
 
 
@@ -12,30 +13,20 @@ ACTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT']
 
 
 def setup(self):
-    """
-    Example of Q-Table implementation on a 5x5 board with 6 actions.
-    Our features represent the Q-Table and consist of simple position
-    on the board (row, column)
-    +-------+------+------+------+-------+------+------+
-    | (r,c) |  up  | down | left | right | wait | bomb |
-    +-------+------+------+------+-------+------+------+
-    | (0,0) | 0.50 | 0.80 | 0.95 | 1.20  | 2.50 | -3.0 |
-    +-------+------+------+------+-------+------+------+
-    | (0,1) | 3.10 | 1.26 | -2.5 | -1.0  | 0.50 |  0.0 |
-    +-------+------+------+------+-------+------+------+
-    |  ...  |  ... |  ... |  ... |  ...  |  ... |  ... |
-    +-------+------+------+------+-------+------+------+
-    | (4,4) | 0.10 | 2.56 | -7.0 |  0.0  | -3.5 | 10.0 |
-    +-------+------+------+------+-------+------+------+
-    """
+
+    self.state_space = StateSpace({
+        "tile_up": ['free_tile', 'coin', 'invalid'],
+        "tile_down": ['free_tile', 'coin', 'invalid'],
+        "tile_left": ['free_tile', 'coin', 'invalid'],
+        "tile_right": ['free_tile', 'coin', 'invalid'],
+        "closest_coin": ["up", "down", "left", "right", "empty"]
+    })
 
     if self.train or not os.path.isfile("q_table.pt"):
         self.logger.info("Setting up Q-Table from scratch")
         self.q_table = None
-        self.state_space = None
     else:
         self.logger.info("Loading saved model")
-        self.state_space = None
         with open("q_table.pt", "rb") as file:
             self.q_table = pickle.load(file)
 
@@ -77,6 +68,8 @@ def game_state_to_feature(self, game_state):
     if game_state is None:
         return None
 
+    agent_state = dict()
+
     # Gather information about the game state
     x, y = game_state['self'][3]
     arena = game_state['field']
@@ -90,13 +83,6 @@ def game_state_to_feature(self, game_state):
             if (0 < i < bomb_map.shape[0]) and (0 < j < bomb_map.shape[1]):
                 bomb_map[i, j] = min(bomb_map[i, j], t)
 
-    # Define features
-    # Movement features
-    tot_move_features = len(ACTIONS)
-    next_tile_state = ['free_tile', 'coin', 'invalid']
-
-    agent_state = [None] * tot_move_features
-
     # Check if there are free tiles in the adjacent space
     # (x, y) is the current position
     directions = [(x, y-1),  # UP
@@ -104,13 +90,14 @@ def game_state_to_feature(self, game_state):
                   (x-1, y),  # LEFT
                   (x+1, y)]  # RIGHT
 
-    for idx, d in enumerate(directions):
+    feature_keys = ["tile_up", "tile_down", "tile_left", "tile_right"]
+    for (key, d) in zip(feature_keys, directions):
         if d in coins:
-            agent_state[idx] = "coin"
+            agent_state[key] = "coin"
         elif arena[d] == 0:
-            agent_state[idx] = "free_tile"
+            agent_state[key] = "free_tile"
         elif arena[d] == -1:
-            agent_state[idx] = "invalid"
+            agent_state[key] = "invalid"
 
     # Look for the shortest distance between the agent and coins
     # Target feature
@@ -119,30 +106,26 @@ def game_state_to_feature(self, game_state):
         free_space[o] = False
     targets = coins
 
-    coin_directions = ["UP", "DOWN", "LEFT", "RIGHT", "EMPTY"]
-
-    coin_direction = None
     best_direction = look_for_targets(free_space, (x, y), targets, self.logger)
-    if best_direction == (x, y-1): coin_direction = "UP"
-    if best_direction == (x, y+1): coin_direction = "DOWN"
-    if best_direction == (x-1, y): coin_direction = "LEFT"
-    if best_direction == (x+1, y): coin_direction = "RIGHT"
-    if best_direction not in [(x, y-1), (x, y+1), (x-1, y), (x+1, y)]: coin_direction = "EMPTY"
 
-    # Update agent state
-    agent_state = tuple(agent_state), coin_direction  
-
-    # Initialise the state space
-    if self.state_space is None:
-        self.state_space = [comb for comb in itertools.product(next_tile_state, repeat=tot_move_features)]
-        self.state_space = [comb for comb in itertools.product(self.state_space, coin_directions)]
+    if best_direction == (x, y-1):
+        agent_state["closest_coin"] = "up"
+    elif best_direction == (x, y+1):
+        agent_state["closest_coin"] = "down"
+    elif best_direction == (x-1, y):
+        agent_state["closest_coin"] = "left"
+    elif best_direction == (x+1, y):
+        agent_state["closest_coin"] = "right"
+    else:
+        agent_state["closest_coin"] = "empty"
 
     # NOTE: How do we index the action and then next_tile_state?
 
     # Find index of the current state
-    agent_state_ix = self.state_space.index(agent_state)
+    agent_state_ix = self.state_space.get_index(agent_state)
 
     return agent_state_ix
+
 
 def look_for_targets(free_space, start, targets, logger=None):
     """Find direction of the closest target that can be reached via free tiles.
