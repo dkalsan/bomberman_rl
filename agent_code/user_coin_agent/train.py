@@ -3,6 +3,8 @@ from collections import namedtuple, deque
 import pickle
 from typing import List
 
+import numpy as np
+
 import events as e
 from .callbacks import ACTIONS
 from .callbacks import game_state_to_feature
@@ -11,17 +13,17 @@ from .callbacks import game_state_to_feature
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-# This is a hyperparameter to our TD-learning
-# For simplicity, we implement only =1 in this example 
-TRANSITION_HISTORY_SIZE = 1
+# Represents 'N' to our TD(N) learning. Must be bigger or equal to 1.
+TRANSITION_HISTORY_SIZE = 4
 
 
 def setup_training(self):
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
 
+
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
-    
+
     old_agent_state = None
     new_agent_state = None
 
@@ -34,20 +36,24 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                                        new_agent_state,
                                        reward_from_events(self, events)))
 
-    update_q_table(self)
+    # Perform a TD(N) update when the buffer fills up
+    if len(self.transitions) == self.transitions.maxlen:
+        update_q_table(self)
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
-    
+
     last_agent_state = game_state_to_feature(self, last_game_state)
-    
+
     self.transitions.append(Transition(last_agent_state,
                                        last_action,
                                        None,
                                        reward_from_events(self, events)))
 
-    update_q_table(self)
+    # Clear the buffer performing the remaining TD(N) updates
+    while len(self.transitions) > 0:
+        update_q_table(self)
 
     with open("q_table.pt", "wb") as file:
         pickle.dump(self.q_table, file)
@@ -73,17 +79,46 @@ def reward_from_events(self, events: List[str]) -> int:
 
 
 def update_q_table(self):
+    """
+    Implements TD(N) update, where the N is assumed
+    from the current number of elements in self.transitions (buffer).
+    Hence it is up to the caller to call this function when
+    the buffer fills up to the required N. This operation removes
+    the first element in the buffer after computing the update.
+
+    Origin state is the state for which we compute a new value
+    and end state is the state we ended up in after collecting
+    N rewards. This state is then used to read the Q-prediction
+    for the rest of the game used in the table update.
+
+    N must be strictly greater or equal to 1.
+    """
+
     alpha = 0.02
     gamma = 0.9
-    old_state, action, new_state, reward = self.transitions.popleft()
 
-    # Temporary: ignore first and last timestep
-    if old_state is not None or new_state is not None:
-        old_q_value = self.q_table[old_state, ACTIONS.index(action)]
-        self.logger.info(f"Q-value {old_q_value}")
+    origin_state_ix, action, _, _ = self.transitions[0]
+    _, _, end_state_ix, _ = self.transitions[-1]
 
-        updated_q_value = \
-            old_q_value + alpha * (reward + gamma * self.q_table[new_state].max() - old_q_value)
-        self.q_table[old_state, ACTIONS.index(action)] = updated_q_value
+    # In the first step, the origin state is None.
+    # We ignore this case.
+    if origin_state_ix is None:
+        self.transitions.popleft()
+        return
 
-        self.logger.info(f"Adjusted Q-Table at index {old_state} from {old_q_value} to {updated_q_value}.")
+    # Collect rewards and discount them by gamma
+    discounted_rewards = np.sum([gamma**i * s[-1] for i, s in enumerate(self.transitions)])
+
+    old_q_value = self.q_table[origin_state_ix, ACTIONS.index(action)]
+
+    q_remainder_estimate = 0.0 if end_state_ix is None else self.q_table[end_state_ix].max()
+
+    updated_q_value = \
+        old_q_value + alpha * (discounted_rewards
+                               + gamma**len(self.transitions) * q_remainder_estimate
+                               - old_q_value)
+
+    self.q_table[origin_state_ix, ACTIONS.index(action)] = updated_q_value
+
+    # Remove the transition, whose state we just processed
+    self.transitions.popleft()
