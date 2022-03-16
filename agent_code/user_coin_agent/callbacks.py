@@ -47,7 +47,12 @@ def act(self, game_state: dict) -> str:
     if self.q_table is None:
         self.q_table = np.zeros((len(self.state_space), len(ACTIONS)))
 
-    epsilon = 0.3
+    # Decaying epsilon
+    epsilon_initial = 1.0
+    epsilon_decay = 0.999
+    epsilon_min = 0.01
+    epsilon = max(epsilon_min,
+                  epsilon_initial * epsilon_decay**(game_state["round"]-1))
 
     # Act randomly according to epsilon-greedy
     if self.train and random.random() < epsilon:
