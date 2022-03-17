@@ -21,8 +21,7 @@ def setup(self):
         "tile_right": ['free_tile', 'coin', 'invalid', 'crate', 'danger'],
         "closest_coin": ['up', 'down', 'left', 'right', 'empty'],
         "optimal_crate": ['up', 'down', 'left', 'right', 'optimal', 'none'],
-        "ticking_bomb": ['up', 'down', 'left', 'right', 'none'],
-        "danger_level": ["immediate", "none"]
+        "ticking_bomb": ['up', 'down', 'left', 'right', 'none']
     })
 
     if self.train or not os.path.isfile("q_table.pt"):
@@ -107,7 +106,7 @@ def game_state_to_feature(self, game_state):
         elif arena[d] == 1:
             agent_state[key] = "crate"
         elif arena[d] == -1:
-            agent_state[key] = "invalid"
+            agent_state[key] = "invalid"  # TODO: danger could also be invalid?
 
     """
     Compute 'closest_coin' feature
@@ -139,18 +138,6 @@ def game_state_to_feature(self, game_state):
 
     best_crate_direction = compute_crate_feature(arena, bomb_map, others, (x, y), game_state["step"])
     agent_state["optimal_crate"] = best_crate_direction
-
-    """
-    Compute 'danger' feature
-    """
-
-    # TODO: Add danger level "medium" if close to an enemy,
-    #       maybe also if setting a bomb here would kill us
-    my_position = (x, y)
-    if bomb_map[my_position] != 5 or explosion_map[my_position] != 0:
-        agent_state["danger_level"] = "immediate"
-    else:
-        agent_state["danger_level"] = "none"
 
     """
     Compute 'ticking_bomb' feature,
@@ -291,7 +278,7 @@ def compute_crate_feature(arena, bomb_map, others, my_location, step):
 
     # Hyperparameters
     # Increase reach as game progresses
-    reach = min(step // 20, 3)
+    reach = min((step // 20) + 1, 4)
 
     possible_locations = (arena == 0) & (bomb_map == 5)
     for o in others:
@@ -308,11 +295,17 @@ def compute_crate_feature(arena, bomb_map, others, my_location, step):
     optimal_location = (-1, -1)
     max_crates_exploded = 0
     for px, py in np.transpose(possible_locations.nonzero()):
-        crates_exploded = compute_num_crates_exploded(arena, (px, py), settings.BOMB_POWER)
 
-        if crates_exploded > max_crates_exploded:
-            optimal_location = (px, py)
-            max_crates_exploded = crates_exploded
+        # Consider only positions directly next to crates
+        if (
+            arena[px-1, py] == 1 or arena[px+1, py] == 1
+            or arena[px, py-1] == 1 or arena[px, py+1] == 1
+        ):
+            crates_exploded = compute_num_crates_exploded(arena, (px, py), settings.BOMB_POWER)
+
+            if crates_exploded > max_crates_exploded:
+                optimal_location = (px, py)
+                max_crates_exploded = crates_exploded
 
     # Return mannhattan directions to optimal location
     if max_crates_exploded == 0:
@@ -335,7 +328,7 @@ def compute_ticking_bomb_feature(bombs, my_position):
     if len(bombs) == 0:
         return "none"
 
-    reach = 2
+    reach = 3
     bomb_positions = np.array([b[0] for b in bombs])
     x_bomb_positions, y_bomb_positions = bomb_positions[:, 0], bomb_positions[:, 1]
 
