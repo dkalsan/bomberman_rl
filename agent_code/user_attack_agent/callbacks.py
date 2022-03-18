@@ -85,32 +85,6 @@ def game_state_to_feature(self, game_state):
     bomb_map = compute_bomb_map(arena, bombs)
 
     """
-    Compute 'tile_*' features
-    """
-
-    # Check if there are free tiles in the adjacent space
-    # (x, y) is the current position
-    directions = [(x, y-1),  # UP
-                  (x, y+1),  # DOWN
-                  (x-1, y),  # LEFT
-                  (x+1, y)]  # RIGHT
-
-    feature_keys = ["tile_up", "tile_down", "tile_left", "tile_right"]
-    for (key, d) in zip(feature_keys, directions):
-        if bomb_map[d] != 5 or explosion_map[d] != 0:
-            agent_state[key] = "danger"
-        elif d in coins:
-            agent_state[key] = "coin"
-        elif d in others:
-            agent_state[key] = "explodable"
-        elif arena[d] == 0:
-            agent_state[key] = "free_tile"
-        elif arena[d] == 1:
-            agent_state[key] = "explodable"
-        elif arena[d] == -1:
-            agent_state[key] = "invalid"
-
-    """
     Activate correct compass mode and directions
     """
 
@@ -185,6 +159,52 @@ def game_state_to_feature(self, game_state):
 
         best_crate_direction = compute_crate_feature(arena, bomb_map, others, (x, y), crate_reach)
         agent_state["compass"] = best_crate_direction
+
+    """
+    Compute 'tile_*' features
+    """
+
+    # Check if there are free tiles in the adjacent space
+    # (x, y) is the current position
+    directions = [(x, y-1),  # UP
+                  (x, y+1),  # DOWN
+                  (x-1, y),  # LEFT
+                  (x+1, y)]  # RIGHT
+
+    feature_keys = ["tile_up", "tile_down", "tile_left", "tile_right"]
+    for (key, d) in zip(feature_keys, directions):
+        # When we are running all fields in explosion spread are considered as "danger"
+        # However the agent needs information whether the tile can be walked.
+        # Hence in this case we consider crates as "explodable"
+        # and therefore the agent can learn it's not walkable and won't try to
+        # walk into them, losing precious escape time.
+        if (
+            agent_state["compass_mode"] == "escape" and
+            bomb_map[d] != 5 or explosion_map[d] != 0 and
+            arena[d] == 1
+        ):
+            agent_state[key] = "explodable"
+
+        # This tile is in danger of explosion, or explosion is ongoing
+        elif bomb_map[d] != 5 or explosion_map[d] != 0:
+            agent_state[key] = "danger"
+
+        elif d in coins:
+            agent_state[key] = "coin"
+
+        # Opponnents are considered explodable
+        elif d in others:
+            agent_state[key] = "explodable"
+
+        elif arena[d] == 0:
+            agent_state[key] = "free_tile"
+
+        # That's a crate
+        elif arena[d] == 1:
+            agent_state[key] = "explodable"
+
+        elif arena[d] == -1:
+            agent_state[key] = "invalid"
 
     """
     Find the index of the computed state

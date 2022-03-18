@@ -12,6 +12,7 @@ from .callbacks import game_state_to_feature
 
 # Events
 OPTIMAL_CRATE_EVENT = "OPTIMAL_CRATE"
+WAY_TO_OPTIMAL_CRATE_BOMBED_EVENT = "WAY_TO_OPTIMAL_CRATE_BOMBED"
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -36,11 +37,24 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     # TODO: Add reward proportional to boxes destroyed?
     if self_action == "BOMB" and old_agent_state is not None:
+
+        # Rewarded for destroying optimal location
         if (
             self.state_space.get_state(old_agent_state)["compass"] == "NP" and
             self.state_space.get_state(old_agent_state)["compass_mode"] == "crate"
         ):
             events.append(OPTIMAL_CRATE_EVENT)
+
+        # Rewarded for destroying boxes, when they are in the
+        # way of the optimal location
+        for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
+            if (
+                self.state_space.get_state(old_agent_state)["compass"] == compass_direction and
+                old_agent_state["arena"][np.array(old_agent_state["self"]) + shift] == 1
+            ):
+                events.append(WAY_TO_OPTIMAL_CRATE_BOMBED_EVENT)
+
+        # 
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -88,6 +102,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
         OPTIMAL_CRATE_EVENT: 0.7,
+        WAY_TO_OPTIMAL_CRATE_BOMBED_EVENT: 0.3
     }
     reward_sum = 0
     for event in events:
@@ -95,19 +110,6 @@ def reward_from_events(self, events: List[str]) -> int:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
-
-"""
-def rotational_update_q_table(self):
-    origin_state_ix, action, _, _ = self.transitions[0]
-
-    rotations = []
-
-    for all rotations:
-        roatated_state_ix = ...
-        update_q_table(rotated_state_ix, self.transitions[1:])
-
-    self.transitions.popleft()
-"""
 
 
 def update_q_table(self):
@@ -126,7 +128,7 @@ def update_q_table(self):
     N must be strictly greater or equal to 1.
     """
 
-    alpha = 0.02
+    alpha = 0.05
     gamma = 0.9
 
     origin_state_ix, action, _, _ = self.transitions[0]
