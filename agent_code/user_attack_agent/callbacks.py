@@ -89,7 +89,7 @@ def game_state_to_feature(self, game_state):
     """
 
     # Reach hyperparameters
-    coin_reach = min((game_state["step"] // 40) + 4, 7)
+    coin_reach = min((game_state["step"] // 40) + 5, 8)
     crate_reach = min((game_state["step"] // 40) + 1, 5)
     enemy_reach = min((game_state["step"] // 100) + 2, 5)
 

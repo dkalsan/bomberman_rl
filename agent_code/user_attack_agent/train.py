@@ -12,7 +12,9 @@ from .callbacks import game_state_to_feature
 
 # Events
 OPTIMAL_CRATE_EVENT = "OPTIMAL_CRATE"
-WAY_TO_OPTIMAL_CRATE_BOMBED_EVENT = "WAY_TO_OPTIMAL_CRATE_BOMBED"
+WAY_TO_COMPASS_NP_BOMBED_EVENT = "WAY_TO_COMPASS_NP_BOMBED"
+FOLLOWED_COMPASS_DIRECTIONS_EVENT = "FOLLOWED_COMPASS_DIRECTIONS"
+
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -35,8 +37,25 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         old_agent_state = game_state_to_feature(self, old_game_state)
         new_agent_state = game_state_to_feature(self, new_game_state)
 
-    # TODO: Add reward proportional to boxes destroyed?
+    # Rewarded for following the compass directions
+    action_to_compass_direction = {
+        "UP": "N",
+        "DOWN": "S",
+        "LEFT": "W",
+        "RIGHT": "E"
+    }
+
+    if (
+        self_action in action_to_compass_direction.keys() and
+        self_action == action_to_compass_direction[self_action]
+    ):
+        events.append(FOLLOWED_COMPASS_DIRECTIONS_EVENT)
+
     if self_action == "BOMB" and old_agent_state is not None:
+
+        # TODO: Add reward proportional to boxes destroyed?
+        #       we would need a feature describing this.
+        ...
 
         # Rewarded for destroying optimal location
         if (
@@ -45,16 +64,25 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         ):
             events.append(OPTIMAL_CRATE_EVENT)
 
-        # Rewarded for destroying boxes, when they are in the
-        # way of the optimal location
-        for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
-            if (
-                self.state_space.get_state(old_agent_state)["compass"] == compass_direction and
-                old_agent_state["arena"][np.array(old_agent_state["self"]) + shift] == 1
-            ):
-                events.append(WAY_TO_OPTIMAL_CRATE_BOMBED_EVENT)
+        # Rewarded for destroying boxes to get to the optimal location
+        # (this can be compass_mode "crate", "attack")
+        # This makes sense for compass modes where Mannhattan distance is used.
+        if (self.state_space.get_state(old_agent_state)["compass_mode"] != "coin"):
+            for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
+                if (
+                    self.state_space.get_state(old_agent_state)["compass"] == compass_direction and
+                    old_agent_state["arena"][np.array(old_agent_state["self"]) + shift] == 1
+                ):
+                    events.append(WAY_TO_COMPASS_NP_BOMBED_EVENT)
 
-        # 
+        # Rewarded for destroying boxes to get to the coin
+        # (with current BFS, it leads you closest to the coin, then returns "NP")
+        # This never happens when you pickup the coin
+        if (
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "coin" and
+            self.state_space.get_state(old_agent_state)["compass"] == "NP"
+        ):
+            events.append(WAY_TO_COMPASS_NP_BOMBED_EVENT)
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -102,7 +130,8 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
         OPTIMAL_CRATE_EVENT: 0.7,
-        WAY_TO_OPTIMAL_CRATE_BOMBED_EVENT: 0.3
+        WAY_TO_COMPASS_NP_BOMBED_EVENT: 0.3,
+        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.1
     }
     reward_sum = 0
     for event in events:
