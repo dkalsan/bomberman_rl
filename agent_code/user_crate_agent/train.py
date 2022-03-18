@@ -36,8 +36,10 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     # TODO: Add reward proportional to boxes destroyed?
     if self_action == "BOMB" and old_agent_state is not None:
-        optimal_crate = self.state_space.get_state(old_agent_state)["optimal_crate"]
-        if optimal_crate == "optimal":
+        if (
+            self.state_space.get_state(old_agent_state)["compass"] == "NP" and
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "crate"
+        ):
             events.append(OPTIMAL_CRATE_EVENT)
 
     self.transitions.append(Transition(old_agent_state,
@@ -93,6 +95,19 @@ def reward_from_events(self, events: List[str]) -> int:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
+
+"""
+def rotational_update_q_table(self):
+    origin_state_ix, action, _, _ = self.transitions[0]
+
+    rotations = []
+
+    for all rotations:
+        roatated_state_ix = ...
+        update_q_table(rotated_state_ix, self.transitions[1:])
+
+    self.transitions.popleft()
+"""
 
 
 def update_q_table(self):

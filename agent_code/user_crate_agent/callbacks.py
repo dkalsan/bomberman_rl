@@ -14,14 +14,14 @@ ACTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'WAIT', 'BOMB']
 
 def setup(self):
 
+    # TODO: Crate is opponent + crate
     self.state_space = StateSpace({
         "tile_up": ['free_tile', 'coin', 'invalid', 'crate', 'danger'],
         "tile_down": ['free_tile', 'coin', 'invalid', 'crate', 'danger'],
         "tile_left": ['free_tile', 'coin', 'invalid', 'crate', 'danger'],
         "tile_right": ['free_tile', 'coin', 'invalid', 'crate', 'danger'],
-        "closest_coin": ['up', 'down', 'left', 'right', 'empty'],
-        "optimal_crate": ['up', 'down', 'left', 'right', 'optimal', 'none'],
-        "ticking_bomb": ['up', 'down', 'left', 'right', 'none']
+        "compass": ["N", "S", "W", "E", "NP"],
+        "compass_mode": ["coin", "crate", "escape"]
     })
 
     if self.train or not os.path.isfile("q_table.pt"):
@@ -109,44 +109,68 @@ def game_state_to_feature(self, game_state):
             agent_state[key] = "invalid"  # TODO: danger could also be invalid?
 
     """
-    Compute 'closest_coin' feature
+    Activate correct compass mode and directions
     """
 
-    # Look for the shortest distance between the agent and coins
-    # Target feature
-    free_space = arena == 0
-    for o in others:
-        free_space[o] = False
-    targets = coins
+    # Reach hyperparameters
+    coin_reach = min((game_state["step"] // 40) + 4, 7)
+    crate_reach = min((game_state["step"] // 40) + 1, 5)
+    # enemy_reach = min((game_state["step"] // 100) + 2, 5)
 
-    best_direction = look_for_targets(free_space, (x, y), targets, self.logger)
+    if bomb_map[x, y] != 5:
+        """
+        Compute 'ticking_bomb' feature,
+        which points the compass toward the bomb
+        """
 
-    if best_direction == (x, y-1):
-        agent_state["closest_coin"] = "up"
-    elif best_direction == (x, y+1):
-        agent_state["closest_coin"] = "down"
-    elif best_direction == (x-1, y):
-        agent_state["closest_coin"] = "left"
-    elif best_direction == (x+1, y):
-        agent_state["closest_coin"] = "right"
+        # Set compass mode to escape
+        agent_state["compass_mode"] = "escape"
+
+        my_position = (x, y)
+        ticking_bomb_direction = compute_ticking_bomb_feature(bombs, my_position)
+        agent_state["compass"] = ticking_bomb_direction
+
+    elif (
+        len(coins) > 0
+        and (np.max(np.abs(np.array(coins) - (x, y)), axis=1) <= coin_reach).any()
+    ):
+        """
+        Compute 'closest_coin' feature
+        """
+
+        # Set compass mode to coin collecting
+        agent_state["compass_mode"] = "coin"
+
+        # Look for the shortest distance between the agent and coins
+        # Target feature
+        free_space = arena == 0
+        for o in others:
+            free_space[o] = False
+        targets = coins
+
+        best_direction = look_for_targets(free_space, (x, y), targets, self.logger)
+
+        if best_direction == (x, y-1):
+            agent_state["compass"] = "N"
+        elif best_direction == (x, y+1):
+            agent_state["compass"] = "S"
+        elif best_direction == (x-1, y):
+            agent_state["compass"] = "W"
+        elif best_direction == (x+1, y):
+            agent_state["compass"] = "E"
+        else:
+            agent_state["compass"] = "NP"
+
     else:
-        agent_state["closest_coin"] = "empty"
+        """
+        Compute 'closest_crate' feature
+        """
 
-    """
-    Compute 'closest_crate' feature
-    """
+        # Set compass mode to coin collecting
+        agent_state["compass_mode"] = "crate"
 
-    best_crate_direction = compute_crate_feature(arena, bomb_map, others, (x, y), game_state["step"])
-    agent_state["optimal_crate"] = best_crate_direction
-
-    """
-    Compute 'ticking_bomb' feature,
-    which points the compass toward the bomb
-    """
-
-    my_position = (x, y)
-    ticking_bomb_direction = compute_ticking_bomb_feature(bombs, my_position)
-    agent_state["ticking_bomb"] = ticking_bomb_direction
+        best_crate_direction = compute_crate_feature(arena, bomb_map, others, (x, y), crate_reach)
+        agent_state["compass"] = best_crate_direction
 
     """
     Find the index of the computed state
@@ -267,7 +291,7 @@ def compute_num_crates_exploded(arena, bomb_location, bomb_power):
     return crates_exploded
 
 
-def compute_crate_feature(arena, bomb_map, others, my_location, step):
+def compute_crate_feature(arena, bomb_map, others, my_location, reach):
     """
     Looks at all possible locations in a given vicinity controlled
     by hyperparameter 'reach', where a bomb could be placed. The
@@ -275,10 +299,6 @@ def compute_crate_feature(arena, bomb_map, others, my_location, step):
     where crates which are already about to be blown up by a ticking bomb
     are excluded.
     """
-
-    # Hyperparameters
-    # Increase reach as game progresses
-    reach = min((step // 20) + 1, 4)
 
     possible_locations = (arena == 0) & (bomb_map == 5)
     for o in others:
@@ -309,24 +329,24 @@ def compute_crate_feature(arena, bomb_map, others, my_location, step):
 
     # Return mannhattan directions to optimal location
     if max_crates_exploded == 0:
-        return "none"
+        return "NP"  # TODO: We had the 6th option 'none' here before, rethink this
 
     if optimal_location[1] > my_location[1]:
-        return "down"
+        return "S"
     elif optimal_location[1] < my_location[1]:
-        return "up"
+        return "N"
 
     if optimal_location[0] > my_location[0]:
-        return "right"
+        return "E"
     elif optimal_location[0] < my_location[0]:
-        return "left"
+        return "W"
     else:
-        return "optimal"
+        return "NP"
 
 
 def compute_ticking_bomb_feature(bombs, my_position):
     if len(bombs) == 0:
-        return "none"
+        return "NP"
 
     reach = 3
     bomb_positions = np.array([b[0] for b in bombs])
@@ -338,7 +358,7 @@ def compute_ticking_bomb_feature(bombs, my_position):
     dangerous_bomb_positions = bomb_positions[mask_x | mask_y, :]
 
     if len(dangerous_bomb_positions) == 0:
-        return "none"
+        return "NP"
 
     closest_dangerous_bomb = dangerous_bomb_positions[
         np.argmin(np.sum(np.abs(dangerous_bomb_positions - my_position), axis=1), axis=0)
@@ -346,18 +366,18 @@ def compute_ticking_bomb_feature(bombs, my_position):
 
     diff = closest_dangerous_bomb - my_position
 
-    # We only care about bombs 2 tiles away from us
+    # We only care about bombs {reach} tiles away from us
     if np.max(np.abs(diff)) > reach:
-        return "none"
+        return "NP"
 
     # Compute in which direction the bomb is, relative to us
     if diff[0] < 0:  # x-axis
-        return "left"
+        return "W"
     elif diff[0] > 0:  # x-axis
-        return "right"
+        return "E"
     elif diff[1] < 0:  # y-axis
-        return "up"
+        return "N"
     elif diff[1] > 0:  # y-axis
-        return "down"
+        return "S"
     else:
-        return "none"  # We are standing on it
+        return "NP"  # We are standing on it
