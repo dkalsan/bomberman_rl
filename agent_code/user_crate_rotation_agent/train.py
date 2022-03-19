@@ -117,30 +117,77 @@ def rotational_update_q_table(self):
         return
 
     origin_state = self.state_space.get_state(origin_state_ix)
-
-    # TODO: Change the dict fields to match the rotated state.
-    #       Don't forget to also rotate the action!
     rotated_state_90 = dict(origin_state)
-    rotated_state_90 = ...
-    rotated_action_90 = ...
-
-    # NOTE: You can also use the rotated_state_90 or any other,
-    #       to create initial rotated_state_180 dictionary copy,
-    #       if you find that more convenient. You might even
-    #       decide to rotate one single state all along in a loop
-    #       and only keep one dict called 'rotated_state'
-    #       (e.g. in the loop at the end of this function).
     rotated_state_180 = dict(origin_state)
-    rotated_state_180 = ...
-    rotated_action_180 = ...
-
     rotated_state_270 = dict(origin_state)
-    rotated_state_270 = ...
-    rotated_action_270 = ...
 
-    rotated_state_270 = dict(origin_state)
-    rotated_state_270 = ...
-    rotated_action_270 = ...
+    # Rotate 90° clockwise the agent and define the rotated state space 
+    # There is a tile on the board whose neighboring tiles have exactly
+    # the same value but different order than the origin state        
+    rotated_state_90['tile_up'] = origin_state['tile_left']
+    rotated_state_90['tile_down'] = origin_state['tile_right']
+    rotated_state_90['tile_left'] = origin_state['tile_down']
+    rotated_state_90['tile_right'] = origin_state['tile_up']
+
+    # Rotate 180° clockwise the agent and define the rotated state space
+    rotated_state_180['tile_up'] = origin_state['tile_down']
+    rotated_state_180['tile_down'] = origin_state['tile_up']
+    rotated_state_180['tile_left'] = origin_state['tile_right']
+    rotated_state_180['tile_right'] = origin_state['tile_left']
+
+    # Rotate 270° clockwise the agent and define the rotated state space
+    rotated_state_270['tile_up'] = origin_state['tile_right']
+    rotated_state_270['tile_down'] = origin_state['tile_left']
+    rotated_state_270['tile_left'] = origin_state['tile_up']
+    rotated_state_270['tile_right'] = origin_state['tile_down']
+
+    # Match "compass" in origin state to the one in rotated state
+    if origin_state['compass'] == "N": 
+        rotated_state_90['compass'] = "E"
+        rotated_state_180['compass'] = "S"
+        rotated_state_270['compass'] = "W"
+    elif origin_state['compass'] == "S": 
+        rotated_state_90['compass'] = "W"
+        rotated_state_180['compass'] = "N"
+        rotated_state_270['compass'] = "E"
+    elif origin_state['compass'] == "W": 
+        rotated_state_90['compass'] = "N"
+        rotated_state_180['compass'] = "E"
+        rotated_state_270['compass'] = "S"
+    elif origin_state['compass'] == "E": 
+        rotated_state_90['compass'] = "S"
+        rotated_state_180['compass'] = "W"
+        rotated_state_270['compass'] = "N"
+    else:
+        rotated_state_90['compass'] = "NP"
+        rotated_state_180['compass'] = "NP"
+        rotated_state_270['compass'] = "NP"
+
+    # Match "action" in origin state to the one in rotated state
+    if action == "UP": 
+        rotated_action_90 = "RIGHT"
+        rotated_action_180 = "DOWN"
+        rotated_action_270 = "LEFT"
+    elif action == "DOWN": 
+        rotated_action_90 = "LEFT"
+        rotated_action_180 = "UP"
+        rotated_action_270 = "RIGHT"
+    elif action == "LEFT": 
+        rotated_action_90 = "UP"
+        rotated_action_180 = "RIGHT"
+        rotated_action_270 = "DOWN"
+    elif action == "RIGHT": 
+        rotated_action_90 = "DOWN"
+        rotated_action_180 = "LEFT"
+        rotated_action_270 = "UP"
+    elif action == "WAIT":
+        rotated_action_90 = "WAIT"
+        rotated_action_180 = "WAIT"
+        rotated_action_270 = "WAIT"
+    else:
+        rotated_action_90 = "BOMB"
+        rotated_action_180 = "BOMB"
+        rotated_action_270 = "BOMB"
 
     all_states = [origin_state, rotated_state_90, rotated_state_180, rotated_state_270]
     all_actions = [action, rotated_action_90, rotated_action_180, rotated_action_270]
@@ -148,7 +195,7 @@ def rotational_update_q_table(self):
     # Update all rotated values
     for s, a in zip(all_states, all_actions):
         s_ix = self.state_space.get_index(s)
-        update_q_table(s_ix, a)
+        update_q_table(self, s_ix, a)
 
     # Remove the transition, whose state we just processed
     self.transitions.popleft()
