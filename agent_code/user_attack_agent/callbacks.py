@@ -7,6 +7,7 @@ import settings
 from .utils import StateSpace
 
 import numpy as np
+from typing import List, Tuple
 
 
 ACTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'WAIT', 'BOMB']
@@ -136,7 +137,7 @@ def game_state_to_feature(self, game_state):
             free_space[o] = False
         targets = coins
 
-        best_direction = look_for_targets(free_space, (x, y), targets, self.logger)
+        best_direction, _, _ = breadth_first_search(free_space, (x, y), targets)
 
         if best_direction == (x, y-1):
             agent_state["compass"] = "N"
@@ -275,55 +276,78 @@ def compute_blast(arena, bomb_position, bomb_power):
     return x_blast, y_blast
 
 
-def look_for_targets(free_space, start, targets, logger=None):
-    """Find direction of the closest target that can be reached via free tiles.
-
-    Performs a breadth-first search of the reachable free tiles until a target is encountered.
-    If no target can be reached, the path that takes the agent closest to any target is chosen.
-
-    Args:
-        free_space: Boolean numpy array. True for free tiles and False for obstacles.
-        start: the coordinate from which to begin the search.
-        targets: list or array holding the coordinates of all target tiles.
-        logger: optional logger object for debugging.
-    Returns:
-        coordinate of first step towards the closest target or towards tile closest to any target.
+def breadth_first_search(free_space, start: Tuple[int, int], targets: List[Tuple[int, int]]):
     """
+    Finds the first target reachable through tiles denoted as free_space.
+    Returns the direction node next to the start node, which the agent
+    should take to reach the closest target node. Also returns the position
+    of the closest target node and the distance to it. If no target can be
+    reached, then we return Mannhattan directions and distance to the closest
+    target.
+    """
+
     if len(targets) == 0:
-        return None
+        return (None, None, 0)
 
-    frontier = [start]
-    parent_dict = {start: start}
-    dist_so_far = {start: 0}
-    best = start
-    best_dist = np.sum(np.abs(np.subtract(targets, start)), axis=1).min()
+    # Initialization
+    queue = [start]
+    explored = {start: None}
 
-    while len(frontier) > 0:
-        current = frontier.pop(0)
-        # Find distance from current position to all targets, track closest
-        d = np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
-        if d + dist_so_far[current] <= best_dist:
-            best = current
-            best_dist = d + dist_so_far[current]
-        if d == 0:
-            # Found path to a target's exact position, mission accomplished!
-            best = current
+    # Find the first target using BFS
+    closest_node = None
+    while len(queue) > 0:
+        current_node = queue.pop(0)
+
+        if current_node in targets:
+            closest_node = current_node
             break
-        # Add unexplored free neighboring tiles to the queue in a random order
-        x, y = current
-        neighbors = [(x, y) for (x, y) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] if free_space[x, y]]
-        random.shuffle(neighbors)
-        for neighbor in neighbors:
-            if neighbor not in parent_dict:
-                frontier.append(neighbor)
-                parent_dict[neighbor] = current
-                dist_so_far[neighbor] = dist_so_far[current] + 1
-    if logger: logger.debug(f'Suitable target found at {best}')
-    # Determine the first step towards the best found target tile
-    current = best
-    while True:
-        if parent_dict[current] == start: return current
-        current = parent_dict[current]
+
+        x, y = current_node
+        neighbor_nodes = [(x, y+1), (x, y-1), (x-1, y), (x+1, y)]
+        walkable_neighbour_nodes = [n for n in neighbor_nodes if free_space[n]]
+
+        for neighbor_node in walkable_neighbour_nodes:
+            if neighbor_node not in explored.keys():
+                queue.append(neighbor_node)
+                explored[neighbor_node] = current_node
+
+    # No target can be reached, we return
+    # Mannhattan direction and distance to
+    # closest target.
+    if closest_node is None:
+        dists = np.sum(np.abs((np.array(targets) - start)), axis=1)
+        closest_node_ix = np.argmin(dists)
+        closest_node = targets[closest_node_ix]
+        dist = dists[closest_node_ix]
+
+        if closest_node[1] > start[1]:
+            direction_node = (start[0], start[1]+1)
+        elif closest_node[1] < start[1]:
+            direction_node = (start[0], start[1]-1)
+        elif closest_node[0] > start[0]:
+            direction_node = (start[0]+1, start[1])
+        elif closest_node[0] < start[0]:
+            direction_node = (start[0]-1, start[1])
+        else:
+            # This should never be the case anyways
+            direction_node = None
+            closest_node = None
+            dist = 0
+
+    # We are standing on a coin
+    elif closest_node == start:
+        dist = 0
+        direction_node = start
+
+    # Target can be reached, backtrack it
+    else:
+        dist = 1
+        direction_node = closest_node
+        while explored[direction_node] != start:
+            direction_node = explored[direction_node]
+            dist += 1
+
+    return (direction_node, closest_node, dist)
 
 
 def compute_num_crates_exploded(arena, bomb_location, bomb_power):
