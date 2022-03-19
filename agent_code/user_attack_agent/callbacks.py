@@ -144,13 +144,14 @@ def game_state_to_feature(self, game_state):
         else:
             agent_state["compass"] = "NP"
 
-    # We enter attack mode if an enemy is in reach or if there are 18
-    # or less crates on the map (~10% of all possible free tiles
-    # in a 15x15 playing field)
+    # We enter attack mode if there are any enemies left and
+    #  - an enemy is in reach or
+    #  - if there are 18 or less crates on the map
+    #    (~10% of all possible free tiles in a 15x15 playing field)
     elif (
-        (len(others) > 0 and
-         (np.max(np.abs(np.array(others) - (x, y)), axis=1) <= enemy_reach).any()) or
-        (np.count_nonzero(arena == 1) <= 18)
+        (len(others) > 0) and
+        ((np.count_nonzero(arena == 1) <= 18) or
+         (np.max(np.abs(np.array(others) - (x, y)), axis=1) <= enemy_reach).any())
     ):
         """
         Compute 'attack' feature
