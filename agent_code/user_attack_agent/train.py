@@ -14,7 +14,7 @@ from .callbacks import game_state_to_feature
 OPTIMAL_CRATE_EVENT = "OPTIMAL_CRATE"
 WAY_TO_COMPASS_NP_BOMBED_EVENT = "WAY_TO_COMPASS_NP_BOMBED"
 FOLLOWED_COMPASS_DIRECTIONS_EVENT = "FOLLOWED_COMPASS_DIRECTIONS"
-
+COMPASS_NP_NEXT_TO_ENEMY_EVENT = "COMPASS_NP_NEXT_TO_ENEMY"
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -67,11 +67,15 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         # Rewarded for destroying boxes to get to the optimal location
         # (this can be compass_mode "crate", "attack")
         # This makes sense for compass modes where Mannhattan distance is used.
-        if (self.state_space.get_state(old_agent_state)["compass_mode"] != "coin"):
+        if (
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "coin" or
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "attack"
+        ):
             for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
+                x, y = np.array(old_game_state["self"][3]) + shift
                 if (
                     self.state_space.get_state(old_agent_state)["compass"] == compass_direction and
-                    old_agent_state["arena"][np.array(old_agent_state["self"]) + shift] == 1
+                    old_game_state["field"][x, y] == 1
                 ):
                     events.append(WAY_TO_COMPASS_NP_BOMBED_EVENT)
 
@@ -83,6 +87,13 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             self.state_space.get_state(old_agent_state)["compass"] == "NP"
         ):
             events.append(WAY_TO_COMPASS_NP_BOMBED_EVENT)
+
+        # Rewarded for laying a bomb close to an enemy as indicated by compass "NP"
+        if (
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "attack" and
+            self.state_space.get_state(old_agent_state)["compass"] == "NP"
+        ):
+            events.append(COMPASS_NP_NEXT_TO_ENEMY_EVENT)
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -131,7 +142,8 @@ def reward_from_events(self, events: List[str]) -> int:
         e.SURVIVED_ROUND: 1.5,
         OPTIMAL_CRATE_EVENT: 0.7,
         WAY_TO_COMPASS_NP_BOMBED_EVENT: 0.3,
-        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.1
+        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.1,  # Negates penalty for moving, makes the sum 0.0
+        COMPASS_NP_NEXT_TO_ENEMY_EVENT: 1.0  # Must be bigger than penalty for setting bomb
     }
     reward_sum = 0
     for event in events:

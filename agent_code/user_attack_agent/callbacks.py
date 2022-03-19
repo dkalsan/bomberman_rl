@@ -41,6 +41,11 @@ def act(self, game_state: dict) -> str:
         self.q_table = np.zeros((len(self.state_space), len(ACTIONS)))
 
     # Decaying epsilon
+    # NOTE: Maybe we should decay epsilon also based on step,
+    #       otherwise the agent is mostly exploring only around
+    #       the starting positions (because he might kill himself
+    #       before coming to the states more common further in the
+    #       game)
     epsilon_initial = 1.0
     epsilon_decay = 0.999
     epsilon_min = 0.01
@@ -89,9 +94,11 @@ def game_state_to_feature(self, game_state):
     """
 
     # Reach hyperparameters
-    coin_reach = min((game_state["step"] // 40) + 5, 8)
-    crate_reach = min((game_state["step"] // 40) + 1, 5)
-    enemy_reach = min((game_state["step"] // 100) + 2, 5)
+    crate_schedule = np.array([1, 20, 60, 100, 160, 220, 300])
+    crate_reach = np.max(np.where(game_state["step"] >= crate_schedule)) + 1
+
+    coin_reach = min((game_state["step"] // 50) + 5, 7)
+    enemy_reach = min((game_state["step"] // 100) + 3, 7)
 
     if bomb_map[x, y] != 5:
         """
@@ -137,9 +144,13 @@ def game_state_to_feature(self, game_state):
         else:
             agent_state["compass"] = "NP"
 
+    # We enter attack mode if an enemy is in reach or if there are 18
+    # or less crates on the map (~10% of all possible free tiles
+    # in a 15x15 playing field)
     elif (
-        len(others) > 0
-        and (np.max(np.abs(np.array(others) - (x, y)), axis=1) <= enemy_reach).any()
+        (len(others) > 0 and
+         (np.max(np.abs(np.array(others) - (x, y)), axis=1) <= enemy_reach).any()) or
+        (np.count_nonzero(arena == 1) <= 18)
     ):
         """
         Compute 'attack' feature
@@ -361,9 +372,19 @@ def compute_crate_feature(arena, bomb_map, others, my_location, reach):
                 optimal_location = (px, py)
                 max_crates_exploded = crates_exploded
 
-    # Return mannhattan directions to optimal location
+    """
+    Return mannhattan directions to optimal location
+    """
+
+    # NO CRATES IN REACH:
+    # We switch to a global view to the closest first crate,
+    # which isn't necessarilly optimal. But as we go there,
+    # we will find and optimal location.
     if max_crates_exploded == 0:
-        return "NP"  # TODO: We had the 6th option 'none' here before, rethink this
+        crates = np.transpose((arena == 1).nonzero())
+        optimal_location = crates[
+            np.argmin(np.sum(np.abs(crates - my_location), axis=1), axis=0)
+        ]
 
     if optimal_location[1] > my_location[1]:
         return "S"
