@@ -113,9 +113,14 @@ def game_state_to_feature(self, game_state):
         ticking_bomb_direction = compute_ticking_bomb_feature(bombs, my_position)
         agent_state["compass"] = ticking_bomb_direction
 
+    # We enter coin mode if there are coins on the map and
+    # - they are in reach or
+    # - they aren't in reach, but there's no opponents or crates left
     elif (
-        len(coins) > 0
-        and (np.max(np.abs(np.array(coins) - (x, y)), axis=1) <= coin_reach).any()
+        (len(coins) > 0) and
+        ((np.max(np.abs(np.array(coins) - (x, y)), axis=1) <= coin_reach).any() or
+         (len(others) == 0 and (np.count_nonzero(arena == 1) == 0))
+         )
     ):
         """
         Compute 'closest_coin' feature
@@ -383,6 +388,12 @@ def compute_crate_feature(arena, bomb_map, others, my_location, reach):
     # we will find and optimal location.
     if max_crates_exploded == 0:
         crates = np.transpose((arena == 1).nonzero())
+
+        # No crates on the map anymore,
+        # safe guard so that np.argmin doesn't crash
+        if len(crates) == 0:
+            return "NP"
+
         optimal_location = crates[
             np.argmin(np.sum(np.abs(crates - my_location), axis=1), axis=0)
         ]
