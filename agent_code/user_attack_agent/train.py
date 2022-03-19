@@ -12,6 +12,9 @@ from .callbacks import game_state_to_feature
 
 # Events
 OPTIMAL_CRATE_EVENT = "OPTIMAL_CRATE"
+WAY_TO_COMPASS_NP_BOMBED_EVENT = "WAY_TO_COMPASS_NP_BOMBED"
+FOLLOWED_COMPASS_DIRECTIONS_EVENT = "FOLLOWED_COMPASS_DIRECTIONS"
+COMPASS_NP_NEXT_TO_ENEMY_EVENT = "COMPASS_NP_NEXT_TO_ENEMY"
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -34,13 +37,63 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         old_agent_state = game_state_to_feature(self, old_game_state)
         new_agent_state = game_state_to_feature(self, new_game_state)
 
-    # TODO: Add reward proportional to boxes destroyed?
+    # Rewarded for following the compass directions
+    action_to_compass_direction = {
+        "UP": "N",
+        "DOWN": "S",
+        "LEFT": "W",
+        "RIGHT": "E"
+    }
+
+    if (
+        self_action in action_to_compass_direction.keys() and
+        self_action == action_to_compass_direction[self_action]
+    ):
+        events.append(FOLLOWED_COMPASS_DIRECTIONS_EVENT)
+
     if self_action == "BOMB" and old_agent_state is not None:
+
+        # TODO: Add reward proportional to boxes destroyed?
+        #       we would need a feature describing this.
+        ...
+
+        # Rewarded for destroying optimal location
         if (
             self.state_space.get_state(old_agent_state)["compass"] == "NP" and
             self.state_space.get_state(old_agent_state)["compass_mode"] == "crate"
         ):
             events.append(OPTIMAL_CRATE_EVENT)
+
+        # Rewarded for destroying boxes to get to the optimal location
+        # (this can be compass_mode "crate", "attack")
+        # This makes sense for compass modes where Mannhattan distance is used.
+        if (
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "coin" or
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "attack"
+        ):
+            for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
+                x, y = np.array(old_game_state["self"][3]) + shift
+                if (
+                    self.state_space.get_state(old_agent_state)["compass"] == compass_direction and
+                    old_game_state["field"][x, y] == 1
+                ):
+                    events.append(WAY_TO_COMPASS_NP_BOMBED_EVENT)
+
+        # Rewarded for destroying boxes to get to the coin
+        # (with current BFS, it leads you closest to the coin, then returns "NP")
+        # This never happens when you pickup the coin
+        if (
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "coin" and
+            self.state_space.get_state(old_agent_state)["compass"] == "NP"
+        ):
+            events.append(WAY_TO_COMPASS_NP_BOMBED_EVENT)
+
+        # Rewarded for laying a bomb close to an enemy as indicated by compass "NP"
+        if (
+            self.state_space.get_state(old_agent_state)["compass_mode"] == "attack" and
+            self.state_space.get_state(old_agent_state)["compass"] == "NP"
+        ):
+            events.append(COMPASS_NP_NEXT_TO_ENEMY_EVENT)
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -88,6 +141,9 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
         OPTIMAL_CRATE_EVENT: 0.7,
+        WAY_TO_COMPASS_NP_BOMBED_EVENT: 0.3,
+        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.1,  # Negates penalty for moving, makes the sum 0.0
+        COMPASS_NP_NEXT_TO_ENEMY_EVENT: 1.0  # Must be bigger than penalty for setting bomb
     }
     reward_sum = 0
     for event in events:
@@ -95,19 +151,6 @@ def reward_from_events(self, events: List[str]) -> int:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
-
-"""
-def rotational_update_q_table(self):
-    origin_state_ix, action, _, _ = self.transitions[0]
-
-    rotations = []
-
-    for all rotations:
-        roatated_state_ix = ...
-        update_q_table(rotated_state_ix, self.transitions[1:])
-
-    self.transitions.popleft()
-"""
 
 
 def update_q_table(self):
@@ -126,7 +169,7 @@ def update_q_table(self):
     N must be strictly greater or equal to 1.
     """
 
-    alpha = 0.02
+    alpha = 0.05
     gamma = 0.9
 
     origin_state_ix, action, _, _ = self.transitions[0]

@@ -41,6 +41,11 @@ def act(self, game_state: dict) -> str:
         self.q_table = np.zeros((len(self.state_space), len(ACTIONS)))
 
     # Decaying epsilon
+    # NOTE: Maybe we should decay epsilon also based on step,
+    #       otherwise the agent is mostly exploring only around
+    #       the starting positions (because he might kill himself
+    #       before coming to the states more common further in the
+    #       game)
     epsilon_initial = 1.0
     epsilon_decay = 0.999
     epsilon_min = 0.01
@@ -85,39 +90,15 @@ def game_state_to_feature(self, game_state):
     bomb_map = compute_bomb_map(arena, bombs)
 
     """
-    Compute 'tile_*' features
-    """
-
-    # Check if there are free tiles in the adjacent space
-    # (x, y) is the current position
-    directions = [(x, y-1),  # UP
-                  (x, y+1),  # DOWN
-                  (x-1, y),  # LEFT
-                  (x+1, y)]  # RIGHT
-
-    feature_keys = ["tile_up", "tile_down", "tile_left", "tile_right"]
-    for (key, d) in zip(feature_keys, directions):
-        if bomb_map[d] != 5 or explosion_map[d] != 0:
-            agent_state[key] = "danger"
-        elif d in coins:
-            agent_state[key] = "coin"
-        elif d in others:
-            agent_state[key] = "explodable"
-        elif arena[d] == 0:
-            agent_state[key] = "free_tile"
-        elif arena[d] == 1:
-            agent_state[key] = "explodable"
-        elif arena[d] == -1:
-            agent_state[key] = "invalid"
-
-    """
     Activate correct compass mode and directions
     """
 
     # Reach hyperparameters
-    coin_reach = min((game_state["step"] // 40) + 4, 7)
-    crate_reach = min((game_state["step"] // 40) + 1, 5)
-    enemy_reach = min((game_state["step"] // 100) + 2, 5)
+    crate_schedule = np.array([1, 20, 60, 100, 160, 220, 300])
+    crate_reach = np.max(np.where(game_state["step"] >= crate_schedule)) + 1
+
+    coin_reach = min((game_state["step"] // 50) + 5, 7)
+    enemy_reach = min((game_state["step"] // 100) + 3, 7)
 
     if bomb_map[x, y] != 5:
         """
@@ -163,9 +144,13 @@ def game_state_to_feature(self, game_state):
         else:
             agent_state["compass"] = "NP"
 
+    # We enter attack mode if an enemy is in reach or if there are 18
+    # or less crates on the map (~10% of all possible free tiles
+    # in a 15x15 playing field)
     elif (
-        len(others) > 0
-        and (np.max(np.abs(np.array(others) - (x, y)), axis=1) <= enemy_reach).any()
+        (len(others) > 0 and
+         (np.max(np.abs(np.array(others) - (x, y)), axis=1) <= enemy_reach).any()) or
+        (np.count_nonzero(arena == 1) <= 18)
     ):
         """
         Compute 'attack' feature
@@ -185,6 +170,52 @@ def game_state_to_feature(self, game_state):
 
         best_crate_direction = compute_crate_feature(arena, bomb_map, others, (x, y), crate_reach)
         agent_state["compass"] = best_crate_direction
+
+    """
+    Compute 'tile_*' features
+    """
+
+    # Check if there are free tiles in the adjacent space
+    # (x, y) is the current position
+    directions = [(x, y-1),  # UP
+                  (x, y+1),  # DOWN
+                  (x-1, y),  # LEFT
+                  (x+1, y)]  # RIGHT
+
+    feature_keys = ["tile_up", "tile_down", "tile_left", "tile_right"]
+    for (key, d) in zip(feature_keys, directions):
+        # When we are running all fields in explosion spread are considered as "danger"
+        # However the agent needs information whether the tile can be walked.
+        # Hence in this case we consider crates as "explodable"
+        # and therefore the agent can learn it's not walkable and won't try to
+        # walk into them, losing precious escape time.
+        if (
+            agent_state["compass_mode"] == "escape" and
+            bomb_map[d] != 5 or explosion_map[d] != 0 and
+            arena[d] == 1
+        ):
+            agent_state[key] = "explodable"
+
+        # This tile is in danger of explosion, or explosion is ongoing
+        elif bomb_map[d] != 5 or explosion_map[d] != 0:
+            agent_state[key] = "danger"
+
+        elif d in coins:
+            agent_state[key] = "coin"
+
+        # Opponnents are considered explodable
+        elif d in others:
+            agent_state[key] = "explodable"
+
+        elif arena[d] == 0:
+            agent_state[key] = "free_tile"
+
+        # That's a crate
+        elif arena[d] == 1:
+            agent_state[key] = "explodable"
+
+        elif arena[d] == -1:
+            agent_state[key] = "invalid"
 
     """
     Find the index of the computed state
@@ -341,9 +372,19 @@ def compute_crate_feature(arena, bomb_map, others, my_location, reach):
                 optimal_location = (px, py)
                 max_crates_exploded = crates_exploded
 
-    # Return mannhattan directions to optimal location
+    """
+    Return mannhattan directions to optimal location
+    """
+
+    # NO CRATES IN REACH:
+    # We switch to a global view to the closest first crate,
+    # which isn't necessarilly optimal. But as we go there,
+    # we will find and optimal location.
     if max_crates_exploded == 0:
-        return "NP"  # TODO: We had the 6th option 'none' here before, rethink this
+        crates = np.transpose((arena == 1).nonzero())
+        optimal_location = crates[
+            np.argmin(np.sum(np.abs(crates - my_location), axis=1), axis=0)
+        ]
 
     if optimal_location[1] > my_location[1]:
         return "S"
