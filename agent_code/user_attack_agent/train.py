@@ -102,7 +102,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     # Perform a TD(N) update when the buffer fills up
     if len(self.transitions) == self.transitions.maxlen:
-        update_q_table(self)
+        rotational_update_q_table(self)
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
@@ -117,7 +117,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     # Clear the buffer performing the remaining TD(N) updates
     while len(self.transitions) > 0:
-        update_q_table(self)
+        rotational_update_q_table(self)
 
     with open("q_table.pt", "wb") as file:
         pickle.dump(self.q_table, file)
@@ -134,15 +134,15 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_RIGHT: -0.1,
         e.MOVED_LEFT: -0.1,
         e.INVALID_ACTION: -0.6,
-        e.BOMB_DROPPED: -0.8,
+        e.BOMB_DROPPED: -0.5,
         e.WAITED: -0.4,
         e.CRATE_DESTROYED: 1.5,
         e.GOT_KILLED: -5,
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
-        OPTIMAL_CRATE_EVENT: 0.7,
-        WAY_TO_COMPASS_NP_BOMBED_EVENT: 0.3,
-        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.1,  # Negates penalty for moving, makes the sum 0.0
+        OPTIMAL_CRATE_EVENT: 2.0,
+        WAY_TO_COMPASS_NP_BOMBED_EVENT: 1.0,
+        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.4,  # Negates penalty for moving, makes the sum 0.0
         COMPASS_NP_NEXT_TO_ENEMY_EVENT: 1.0  # Must be bigger than penalty for setting bomb
     }
     reward_sum = 0
@@ -153,13 +153,117 @@ def reward_from_events(self, events: List[str]) -> int:
     return reward_sum
 
 
-def update_q_table(self):
+def rotational_update_q_table(self):
+    """
+    Implements TD(N) update for all states which are the same as
+    the origin state from the first element in the buffer under
+    repeated 90 degree rotations. This operation removes the first
+    element from the buffer after computing the updates.
+
+    For further details on Q-Table update, refer to update_q_table(...)
+    function.
+    """
+
+    origin_state_ix, action, _, _ = self.transitions[0]
+
+    # In the first step, the origin state is None.
+    # We ignore this case.
+    if origin_state_ix is None:
+        self.transitions.popleft()
+        return
+
+    origin_state = self.state_space.get_state(origin_state_ix)
+    rotated_state_90 = dict(origin_state)
+    rotated_state_180 = dict(origin_state)
+    rotated_state_270 = dict(origin_state)
+
+    # Rotate 90° clockwise the agent and define the rotated state space
+    # There is a tile on the board whose neighboring tiles have exactly
+    # the same value but different order than the origin state
+    rotated_state_90['tile_up'] = origin_state['tile_left']
+    rotated_state_90['tile_down'] = origin_state['tile_right']
+    rotated_state_90['tile_left'] = origin_state['tile_down']
+    rotated_state_90['tile_right'] = origin_state['tile_up']
+
+    # Rotate 180° clockwise the agent and define the rotated state space
+    rotated_state_180['tile_up'] = origin_state['tile_down']
+    rotated_state_180['tile_down'] = origin_state['tile_up']
+    rotated_state_180['tile_left'] = origin_state['tile_right']
+    rotated_state_180['tile_right'] = origin_state['tile_left']
+
+    # Rotate 270° clockwise the agent and define the rotated state space
+    rotated_state_270['tile_up'] = origin_state['tile_right']
+    rotated_state_270['tile_down'] = origin_state['tile_left']
+    rotated_state_270['tile_left'] = origin_state['tile_up']
+    rotated_state_270['tile_right'] = origin_state['tile_down']
+
+    # Match "compass" in origin state to the one in rotated state
+    if origin_state['compass'] == "N":
+        rotated_state_90['compass'] = "E"
+        rotated_state_180['compass'] = "S"
+        rotated_state_270['compass'] = "W"
+    elif origin_state['compass'] == "S":
+        rotated_state_90['compass'] = "W"
+        rotated_state_180['compass'] = "N"
+        rotated_state_270['compass'] = "E"
+    elif origin_state['compass'] == "W":
+        rotated_state_90['compass'] = "N"
+        rotated_state_180['compass'] = "E"
+        rotated_state_270['compass'] = "S"
+    elif origin_state['compass'] == "E":
+        rotated_state_90['compass'] = "S"
+        rotated_state_180['compass'] = "W"
+        rotated_state_270['compass'] = "N"
+    else:
+        rotated_state_90['compass'] = "NP"
+        rotated_state_180['compass'] = "NP"
+        rotated_state_270['compass'] = "NP"
+
+    # Match "action" in origin state to the one in rotated state
+    if action == "UP":
+        rotated_action_90 = "RIGHT"
+        rotated_action_180 = "DOWN"
+        rotated_action_270 = "LEFT"
+    elif action == "DOWN":
+        rotated_action_90 = "LEFT"
+        rotated_action_180 = "UP"
+        rotated_action_270 = "RIGHT"
+    elif action == "LEFT":
+        rotated_action_90 = "UP"
+        rotated_action_180 = "RIGHT"
+        rotated_action_270 = "DOWN"
+    elif action == "RIGHT":
+        rotated_action_90 = "DOWN"
+        rotated_action_180 = "LEFT"
+        rotated_action_270 = "UP"
+    elif action == "WAIT":
+        rotated_action_90 = "WAIT"
+        rotated_action_180 = "WAIT"
+        rotated_action_270 = "WAIT"
+    else:
+        rotated_action_90 = "BOMB"
+        rotated_action_180 = "BOMB"
+        rotated_action_270 = "BOMB"
+
+    # TODO: Update only unique states?
+    all_states = [origin_state, rotated_state_90, rotated_state_180, rotated_state_270]
+    all_actions = [action, rotated_action_90, rotated_action_180, rotated_action_270]
+
+    # Update all rotated values
+    for s, a in zip(all_states, all_actions):
+        s_ix = self.state_space.get_index(s)
+        update_q_table(self, s_ix, a)
+
+    # Remove the transition, whose state we just processed
+    self.transitions.popleft()
+
+
+def update_q_table(self, origin_state_ix, action):
     """
     Implements TD(N) update, where the N is assumed
     from the current number of elements in self.transitions (buffer).
     Hence it is up to the caller to call this function when
-    the buffer fills up to the required N. This operation removes
-    the first element in the buffer after computing the update.
+    the buffer fills up to the required N.
 
     Origin state is the state for which we compute a new value
     and end state is the state we ended up in after collecting
@@ -169,17 +273,10 @@ def update_q_table(self):
     N must be strictly greater or equal to 1.
     """
 
-    alpha = 0.05
+    alpha = 0.08
     gamma = 0.9
 
-    origin_state_ix, action, _, _ = self.transitions[0]
     _, _, end_state_ix, _ = self.transitions[-1]
-
-    # In the first step, the origin state is None.
-    # We ignore this case.
-    if origin_state_ix is None:
-        self.transitions.popleft()
-        return
 
     # Collect rewards and discount them by gamma
     discounted_rewards = np.sum([gamma**i * s[-1] for i, s in enumerate(self.transitions)])
@@ -194,6 +291,3 @@ def update_q_table(self):
                                - old_q_value)
 
     self.q_table[origin_state_ix, ACTIONS.index(action)] = updated_q_value
-
-    # Remove the transition, whose state we just processed
-    self.transitions.popleft()
