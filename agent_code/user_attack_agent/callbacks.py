@@ -111,8 +111,39 @@ def game_state_to_feature(self, game_state):
         agent_state["compass_mode"] = "escape"
 
         my_position = (x, y)
-        ticking_bomb_direction = compute_ticking_bomb_feature(bombs, my_position)
-        agent_state["compass"] = ticking_bomb_direction
+
+        # We are standing on a bomb, point in the
+        # opposite direction of the first exist
+        # (because our feature usually points to bombs, and
+        #  the agent is expected to run away from them,
+        #  we point away from the exit)
+        if my_position in [b[0] for b in bombs]:
+            # TODO: Only 4 steps away?
+            free_space = arena == 0
+            for o in others:
+                free_space[o] = False
+
+            safe_space = free_space & (bomb_map == 5)
+            safe_space_indices = list(map(tuple, np.transpose(np.nonzero(safe_space))))
+
+            best_direction, _, _ = breadth_first_search(free_space, (x, y), safe_space_indices)
+
+            if best_direction == (x, y-1):
+                agent_state["compass"] = "S"
+            elif best_direction == (x, y+1):
+                agent_state["compass"] = "N"
+            elif best_direction == (x-1, y):
+                agent_state["compass"] = "E"
+            elif best_direction == (x+1, y):
+                agent_state["compass"] = "W"
+            else:
+                agent_state["compass"] = "NP"
+
+        # We are not on a bomb, point to the bomb with a simple
+        # mannhattan distance (no search for escape route with BFS here)
+        else:
+            ticking_bomb_direction = compute_ticking_bomb_feature(bombs, my_position)
+            agent_state["compass"] = ticking_bomb_direction
 
     # We enter coin mode if there are coins on the map and
     # - they are in reach or
@@ -198,7 +229,7 @@ def game_state_to_feature(self, game_state):
         # walk into them, losing precious escape time.
         if (
             agent_state["compass_mode"] == "escape" and
-            bomb_map[d] != 5 or explosion_map[d] != 0 and
+            bomb_map[d] != 5 and
             arena[d] == 1
         ):
             agent_state[key] = "explodable"
@@ -483,7 +514,7 @@ def compute_attack_feature(others, my_location):
 
     if (
         (np.abs(diff) == 0).any()  # We are in the same row/col as the enemy
-        and (np.abs(diff) <= 2).any()  # We are 1 or 2 tiles away from the enemy
+        and (np.abs(diff) <= 2).all()  # We are 1 or 2 tiles away from the enemy
     ):
         return "NP"
 
