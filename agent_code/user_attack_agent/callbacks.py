@@ -64,14 +64,6 @@ def act(self, game_state: dict) -> str:
         return chosen_action  # Exploit learned values
 
 
-def get_q_index(game_state):
-    if game_state is None:
-        return None
-
-    col, row = game_state["self"][-1]
-    return (col-1) + (settings.COLS-2) * (row-1)
-
-
 def game_state_to_feature(self, game_state):
     if game_state is None:
         return None
