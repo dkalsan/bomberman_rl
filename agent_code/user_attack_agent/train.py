@@ -140,6 +140,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.GOT_KILLED: -5,
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
+        e.KILLED_OPPONENT: 5,
         OPTIMAL_CRATE_EVENT: 2.0,
         WAY_TO_COMPASS_NP_BOMBED_EVENT: 1.0,
         FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.4,  # Negates penalty for moving, makes the sum 0.0

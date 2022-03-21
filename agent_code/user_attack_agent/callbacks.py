@@ -17,10 +17,10 @@ def setup(self):
 
     # "explodable" = "crate" + "opponnent"
     self.state_space = StateSpace({
-        "tile_up": ['free_tile', 'coin', 'invalid', 'explodable', 'danger'],
-        "tile_down": ['free_tile', 'coin', 'invalid', 'explodable', 'danger'],
-        "tile_left": ['free_tile', 'coin', 'invalid', 'explodable', 'danger'],
-        "tile_right": ['free_tile', 'coin', 'invalid', 'explodable', 'danger'],
+        "tile_up": ['free_tile', 'coin', 'invalid', 'explodable', 'explosion', 'ticking'],
+        "tile_down": ['free_tile', 'coin', 'invalid', 'explodable', 'explosion', 'ticking'],
+        "tile_left": ['free_tile', 'coin', 'invalid', 'explodable', 'explosion', 'ticking'],
+        "tile_right": ['free_tile', 'coin', 'invalid', 'explodable', 'explosion', 'ticking'],
         "compass": ["N", "S", "W", "E", "NP"],
         "compass_mode": ["coin", "crate", "escape", "attack"]
     })
@@ -181,15 +181,7 @@ def game_state_to_feature(self, game_state):
         else:
             agent_state["compass"] = "NP"
 
-    # We enter attack mode if there are any enemies left and
-    #  - an enemy is in reach or
-    #  - if there are 18 or less crates on the map
-    #    (~10% of all possible free tiles in a 15x15 playing field)
-    elif (
-        (len(others) > 0) and
-        ((np.count_nonzero(arena == 1) <= 18) or
-         (np.max(np.abs(np.array(others) - (x, y)), axis=1) <= enemy_reach).any())
-    ):
+    elif (len(others) > 0):
         """
         Compute 'attack' feature
         """
@@ -235,8 +227,11 @@ def game_state_to_feature(self, game_state):
             agent_state[key] = "explodable"
 
         # This tile is in danger of explosion, or explosion is ongoing
-        elif bomb_map[d] != 5 or explosion_map[d] != 0:
-            agent_state[key] = "danger"
+        elif explosion_map[d] != 0:
+            agent_state[key] = "explosion"
+
+        elif bomb_map[d] != 5:
+            agent_state[key] = "ticking"
 
         elif d in coins:
             agent_state[key] = "coin"
@@ -513,8 +508,7 @@ def compute_attack_feature(others, my_location):
     diff = closest_enemy_location - my_location
 
     if (
-        (np.abs(diff) == 0).any()  # We are in the same row/col as the enemy
-        and (np.abs(diff) <= 2).all()  # We are 1 or 2 tiles away from the enemy
+        (np.abs(diff) <= 2).all()  # We are 1 or 2 tiles away from the enemy
     ):
         return "NP"
 
