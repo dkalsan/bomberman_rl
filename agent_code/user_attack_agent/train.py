@@ -123,8 +123,8 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     with open("q_table.pt", "wb") as file:
         pickle.dump(self.q_table, file)
 
-    # Create a checkpoint every 5000 rounds
-    if last_game_state["round"] > 0 and last_game_state["round"] % 5000 == 0:
+    # Create a checkpoint every 1000 rounds
+    if last_game_state["round"] > 0 and last_game_state["round"] % 1000 == 0:
         Path("checkpoints").mkdir(exist_ok=True)
 
         if hasattr(self, "checkpoint_rounds"):

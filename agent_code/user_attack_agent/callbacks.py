@@ -34,8 +34,9 @@ def setup(self):
     if self.train and os.path.isfile(checkpoint_filename):
         print("Loading Q-Table from checkpoint")
         self.logger.info(f"Loading Q-Table from {checkpoint_filename}")
-        self.q_table = np.zeros((len(self.state_space), len(ACTIONS)))
         self.checkpoint_rounds = int(Path(checkpoint_filename).stem.split("_")[-1])
+        with open(checkpoint_filename, "rb") as file:
+            self.q_table = pickle.load(file)
     elif self.train or not os.path.isfile("q_table.pt"):
         print("Setting up Q-Table from scratch")
         self.logger.info("Setting up Q-Table from scratch")
