@@ -57,7 +57,9 @@ def act(self, game_state: dict) -> str:
         return chosen_action  # Explore action space
     else:
         chosen_action = ACTIONS[np.argmax(self.q_table[agent_state])]
-        self.logger.info(f"I'm going with {chosen_action}, because it's the best!")
+        self.logger.debug(f"Agent state: {self.state_space.get_state(agent_state)}")
+        self.logger.debug(f"QTable: {self.q_table[agent_state]}")
+        self.logger.debug(f"Action {chosen_action}")
         return chosen_action  # Exploit learned values
 
 
