@@ -9,6 +9,8 @@ from .utils import StateSpace
 import numpy as np
 from typing import List, Tuple
 
+from pathlib import Path
+
 
 ACTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'WAIT', 'BOMB']
 
@@ -25,7 +27,17 @@ def setup(self):
         "compass_mode": ["coin", "crate", "escape", "attack"]
     })
 
-    if self.train or not os.path.isfile("q_table.pt"):
+    # NOTE: For simplicity, set the checkpoint name manually here
+    #       by replacing the 0000000 with the checkpoint number
+    #       and make sure it's in the same directory as this file.
+    checkpoint_filename = "q_table_checkpoint_10000.pt"
+    if self.train and os.path.isfile(checkpoint_filename):
+        print("Loading Q-Table from checkpoint")
+        self.logger.info(f"Loading Q-Table from {checkpoint_filename}")
+        self.q_table = np.zeros((len(self.state_space), len(ACTIONS)))
+        self.checkpoint_rounds = int(Path(checkpoint_filename).stem.split("_")[-1])
+    elif self.train or not os.path.isfile("q_table.pt"):
+        print("Setting up Q-Table from scratch")
         self.logger.info("Setting up Q-Table from scratch")
         self.q_table = np.zeros((len(self.state_space), len(ACTIONS)))
     else:
@@ -47,19 +59,30 @@ def act(self, game_state: dict) -> str:
     epsilon_initial = 1.0
     epsilon_decay = 0.999
     epsilon_min = 0.01
-    epsilon = max(epsilon_min,
-                  epsilon_initial * epsilon_decay**(game_state["round"]-1))
+
+    if self.train and hasattr(self, "checkpoint_rounds"):
+        checkpoint_rounds = self.checkpoint_rounds
+        epsilon = max(epsilon_min,
+                      epsilon_initial * epsilon_decay**(game_state["round"]-1+checkpoint_rounds))
+    else:
+        epsilon = max(epsilon_min,
+                      epsilon_initial * epsilon_decay**(game_state["round"]-1))
 
     # Act randomly according to epsilon-greedy
     if self.train and random.random() < epsilon:
         chosen_action = np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
-        self.logger.info(f"Discovery time! Let's try {chosen_action}...")
+        self.logger.debug(f"[{game_state['round']:06d}|{game_state['step']:03d}]"
+                          f" Agent state: {self.state_space.get_state(agent_state)}")
+        self.logger.info(f"[{game_state['round']:06d}|{game_state['step']:03d}] Exploring {chosen_action}")
         return chosen_action  # Explore action space
     else:
         chosen_action = ACTIONS[np.argmax(self.q_table[agent_state])]
-        self.logger.debug(f"Agent state: {self.state_space.get_state(agent_state)}")
-        self.logger.debug(f"QTable: {self.q_table[agent_state]}")
-        self.logger.debug(f"Action {chosen_action}")
+        self.logger.debug(f"[{game_state['round']:06d}|{game_state['step']:03d}]"
+                          f" Agent state: {self.state_space.get_state(agent_state)}")
+        self.logger.debug(f"[{game_state['round']:06d}|{game_state['step']:03d}]"
+                          f" QTable: {self.q_table[agent_state]}")
+        self.logger.debug(f"[{game_state['round']:06d}|{game_state['step']:03d}]"
+                          f" Action {chosen_action}")
         return chosen_action  # Exploit learned values
 
 

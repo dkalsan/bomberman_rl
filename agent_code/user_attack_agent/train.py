@@ -2,6 +2,7 @@ from collections import namedtuple, deque
 
 import pickle
 from typing import List
+from pathlib import Path
 
 import numpy as np
 
@@ -121,6 +122,12 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     with open("q_table.pt", "wb") as file:
         pickle.dump(self.q_table, file)
+
+    # Create a checkpoint every 5000 rounds
+    if last_game_state["round"] > 0 and last_game_state["round"] % 1000 == 0:
+        Path("checkpoints").mkdir(exist_ok=True)
+        with open(f"checkpoints/q_table_checkpoint_{last_game_state['round']}.pt", "wb") as file:
+            pickle.dump(self.q_table, file)
 
 
 # TODO: Adjust rewards, so that it makes sense for him
