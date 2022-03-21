@@ -27,7 +27,7 @@ def setup(self):
 
     if self.train or not os.path.isfile("q_table.pt"):
         self.logger.info("Setting up Q-Table from scratch")
-        self.q_table = None
+        self.q_table = np.zeros((len(self.state_space), len(ACTIONS)))
     else:
         self.logger.info("Loading saved model")
         with open("q_table.pt", "rb") as file:
@@ -37,9 +37,6 @@ def setup(self):
 def act(self, game_state: dict) -> str:
 
     agent_state = game_state_to_feature(self, game_state)
-
-    if self.q_table is None:
-        self.q_table = np.zeros((len(self.state_space), len(ACTIONS)))
 
     # Decaying epsilon
     # NOTE: Maybe we should decay epsilon also based on step,
