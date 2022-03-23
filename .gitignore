@@ -115,3 +115,4 @@ results/
 # custom
 .vscode/
 *.pt
+*.joblib
