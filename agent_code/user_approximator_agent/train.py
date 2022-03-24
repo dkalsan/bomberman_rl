@@ -78,8 +78,9 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     }
 
     if (
+        old_agent_state is not None and
         self_action in action_to_compass_direction.keys() and
-        self_action == action_to_compass_direction[self_action]
+        old_agent_state["coin_compass"][0] == action_to_compass_direction[self_action]
     ):
         events.append(FOLLOWED_COMPASS_DIRECTIONS_EVENT)
 
@@ -127,8 +128,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
         e.KILLED_OPPONENT: 5,
-        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 1.5,
-        # FOLLOWED_CLOSEST_COIN_EVENT: 0.2
+        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.2
     }
     reward_sum = 0
     for event in events:
@@ -204,4 +204,4 @@ def retrain_q_estimator(self):
     self.model.fit(pd.concat(X, ignore_index=True), y)
 
     # Store new model
-    joblib.dump(self.model, "rf_model_.joblib")
+    joblib.dump(self.model, "rf_model.joblib")

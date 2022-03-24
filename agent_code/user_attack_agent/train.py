@@ -47,8 +47,9 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     }
 
     if (
+        old_agent_state is not None and
         self_action in action_to_compass_direction.keys() and
-        self_action == action_to_compass_direction[self_action]
+        self.state_space.get_state(old_agent_state)["compass"] == action_to_compass_direction[self_action]
     ):
         events.append(FOLLOWED_COMPASS_DIRECTIONS_EVENT)
 

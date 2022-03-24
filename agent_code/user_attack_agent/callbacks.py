@@ -30,7 +30,7 @@ def setup(self):
     # NOTE: For simplicity, set the checkpoint name manually here
     #       by replacing the 0000000 with the checkpoint number
     #       and make sure it's in the same directory as this file.
-    checkpoint_filename = "q_table_checkpoint_10000.pt"
+    checkpoint_filename = "q_table_checkpoint_65000.pt"
     if self.train and os.path.isfile(checkpoint_filename):
         print("Loading Q-Table from checkpoint")
         self.logger.info(f"Loading Q-Table from {checkpoint_filename}")
