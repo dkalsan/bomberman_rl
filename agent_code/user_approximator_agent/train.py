@@ -23,6 +23,7 @@ CRATES_DESTROYED_1 = "CRATES_DESTROYED_1"
 CRATES_DESTROYED_2 = "CRATES_DESTROYED_2"
 CRATES_DESTROYED_3TO4 = "CRATES_DESTROYED_3TO4"
 CRATES_DESTROYED_5ORMORE = "CRATES_DESTROYED_5ORMORE"
+ENEMY_DEADEND_TRAPPED = "ENEMY_DEADEND_TRAPPED"
 
 # Temporal difference of N
 TD_N = 4
@@ -105,7 +106,19 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                     * Reward for blowing up crates on the way to compass?
                     * Add raw distance features?
         """
-        ...
+        
+        """
+        Reward if an enemy is in a deadend and agent moves towards him
+        """
+
+        routes = ["tile_up_route", "tile_down_route", "tile_left_route", "tile_right_route"]
+
+        for enemy_dir, route, action in zip(["N", "S", "E", "W"], routes, ['UP', 'DOWN', 'LEFT', 'RIGHT']):
+            if old_agent_state["enemy_compass"] == enemy_dir \
+                and old_agent_state[route] in ["shallow-deadend", "l-shallow-deadend", "deep-deadend"] \
+                and self_action == action:
+                events.append(ENEMY_DEADEND_TRAPPED)
+
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -156,7 +169,8 @@ def reward_from_events(self, events: List[str]) -> int:
         CRATES_DESTROYED_1: 0.5,
         CRATES_DESTROYED_2: 0.7,
         CRATES_DESTROYED_3TO4: 1.1,
-        CRATES_DESTROYED_5ORMORE: 1.4
+        CRATES_DESTROYED_5ORMORE: 1.4,
+        ENEMY_DEADEND_TRAPPED: 1
     }
     reward_sum = 0
     for event in events:
