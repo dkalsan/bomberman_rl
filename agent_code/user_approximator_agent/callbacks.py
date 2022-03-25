@@ -18,7 +18,16 @@ def setup(self):
         self.logger.info("Initializing RF model from scratch")
         self.model = RFAgent(
             categorical_features={
-                "coin_compass": ["N", "S", "W", "E", "NP"]
+                "coin_compass": ["N", "S", "W", "E", "NP"],
+                "enemy_compass": ["N", "S", "W", "E", "NP"],
+                "tile_up": ['free_tile', 'coin', 'invalid', 'explodable'],
+                "tile_down": ['free_tile', 'coin', 'invalid', 'explodable'],
+                "tile_left": ['free_tile', 'coin', 'invalid', 'explodable'],
+                "tile_right": ['free_tile', 'coin', 'invalid', 'explodable'],
+                "tile_up_route": ["invalid", "loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend"],
+                "tile_down_route": ["invalid", "loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend"],
+                "tile_left_route": ["invalid", "loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend"],
+                "tile_right_route": ["invalid", "loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend"]
             },
             actions=['UP', 'DOWN', 'LEFT', 'RIGHT', 'WAIT', 'BOMB'],
             config={
@@ -85,7 +94,7 @@ def game_state_to_feature(self, game_state):
     bomb_map = compute_bomb_map(arena, bombs)
 
     """
-    Compute distance to closest coin in each direction
+    Compute direction to closest coin
     """
 
     free_space = arena == 0
@@ -93,20 +102,109 @@ def game_state_to_feature(self, game_state):
         free_space[o] = False
     targets = coins
 
-    best_direction, _, dist = breadth_first_search(free_space, (x, y), targets)
+    # If there is no coin, the model should learn to read that from "NP"
+    best_direction_coin, _, coin_dist = breadth_first_search(free_space, (x, y), targets)
 
-    if best_direction == (x, y-1):
+    if best_direction_coin == (x, y-1):
         agent_state["coin_compass"] = ["N"]
-    elif best_direction == (x, y+1):
+    elif best_direction_coin == (x, y+1):
         agent_state["coin_compass"] = ["S"]
-    elif best_direction == (x-1, y):
+    elif best_direction_coin == (x-1, y):
         agent_state["coin_compass"] = ["W"]
-    elif best_direction == (x+1, y):
+    elif best_direction_coin == (x+1, y):
         agent_state["coin_compass"] = ["E"]
     else:
         agent_state["coin_compass"] = ["NP"]
 
-    # agent_state["coin_distance"] = [dist]
+    """
+    Number of crates exploded feature
+    """
+
+    num_explodable_crates = compute_num_crates_exploded(arena, (x, y), settings.BOMB_POWER)
+    agent_state["num_explodable_crates"] = num_explodable_crates
+
+    """
+    Compute direction to closest enemy
+    """
+
+    # If there are no enemies, the model should learn to read that from "NP"
+    best_direction_enemy, _, enemy_dist = breadth_first_search(arena == 0, (x, y), others)
+
+    if best_direction_enemy == (x, y-1):
+        agent_state["enemy_compass"] = ["N"]
+    elif best_direction_enemy == (x, y+1):
+        agent_state["enemy_compass"] = ["S"]
+    elif best_direction_enemy == (x-1, y):
+        agent_state["enemy_compass"] = ["W"]
+    elif best_direction_enemy == (x+1, y):
+        agent_state["enemy_compass"] = ["E"]
+    else:
+        agent_state["enemy_compass"] = ["NP"]
+
+    """
+    Compute difference in distance between enemy and coin.
+    """
+
+    # The model can see which one is closer to it
+    agent_state["coin_enemy_dist_diff"] = coin_dist - enemy_dist
+
+    # Useful for picking up coins in dead-ends.
+    # If greater than 0, our agent can get in and out
+    # of the dead end before an enemy can reach the entrance.
+    agent_state["deadend_coin_enemy_dist_diff"] = 2*coin_dist - enemy_dist
+
+    """
+    Compute deadend feature for trapping and escape purposes.
+    """
+
+    # Check if there are free tiles in the adjacent space
+    # (x, y) is the current position
+    directions = [(x, y-1),  # UP
+                  (x, y+1),  # DOWN
+                  (x-1, y),  # LEFT
+                  (x+1, y)]  # RIGHT
+
+    feature_keys = ["tile_up_route", "tile_down_route", "tile_left_route", "tile_right_route"]
+    for (key, d) in zip(feature_keys, directions):
+        furthest_node, dist = deadend_breadth_first_search(free_space, (x, y), d)
+
+        if furthest_node is None:
+            agent_state[key] = ["invalid"]
+        elif furthest_node == (x, y):
+            agent_state[key] = ["loop"]
+        elif dist <= 3:
+            if furthest_node[0] == x or furthest_node[1] == y:
+                agent_state[key] = ["shallow-deadend"]
+            else:
+                agent_state[key] = ["l-shallow-deadend"]
+        else:
+            agent_state[key] = ["deep-deadend"]
+
+    """
+    Compute direction to the bomb if we are in blast-zone,
+    for escape purposes
+    """
+
+    ...
+
+    """
+    Compute 'tile_*' features
+    """
+
+    feature_keys = ["tile_up", "tile_down", "tile_left", "tile_right"]
+    for (key, d) in zip(feature_keys, directions):
+        if d in coins:
+            agent_state[key] = ["coin"]
+
+        # Crates and opponents
+        elif (arena[d] == 1) or (d in others):
+            agent_state[key] = ["explodable"]
+
+        elif arena[d] == 0:
+            agent_state[key] = ["free_tile"]
+
+        elif arena[d] == -1:
+            agent_state[key] = ["invalid"]
 
     """
     Create a pd.DataFrame which can then be fed directly into the model
@@ -246,3 +344,57 @@ def compute_num_crates_exploded(arena, bomb_location, bomb_power):
     crates_exploded += np.count_nonzero(crates[x_bomb, y_blast])
 
     return crates_exploded
+
+
+def deadend_breadth_first_search(free_space, my_location: Tuple[int, int], start: Tuple[int, int]):
+    """
+    Adaptation of breadth_first_search for evaluating dead ends for a
+    given neighbouring tile.
+
+    my_location: where the agent is located at the time of function call
+    start: one of the neighbouring fields of the agent (up, down, left, right)
+
+    We return either:
+    - my_location, if there is a loop, together with its distance (length)
+    - current_node, if there is no loop, which represents the furthest
+      reachable tile in the deadend, and the distance to it.
+    """
+
+    # This direction is not walkable
+    if not free_space[start]:
+        return (None, -1)
+
+    # Initialization
+    queue = [start]
+    explored = {start: None}
+
+    # Find the first target using BFS
+    while len(queue) > 0:
+        current_node = queue.pop(0)
+
+        # We found a loop
+        if current_node == my_location:
+            break
+
+        x, y = current_node
+        neighbor_nodes = [(x, y+1), (x, y-1), (x-1, y), (x+1, y)]
+        walkable_neighbour_nodes = [n for n in neighbor_nodes if free_space[n]]
+
+        # The search shouldn't go directly back to the my_location
+        # in the first iteration.
+        if len(explored) == 1:
+            walkable_neighbour_nodes.remove(my_location)
+
+        for neighbor_node in walkable_neighbour_nodes:
+            if neighbor_node not in explored.keys():
+                queue.append(neighbor_node)
+                explored[neighbor_node] = current_node
+
+    # Backtrack the location to compute distance
+    dist = 1
+    direction_node = current_node
+    while explored[direction_node] is not None:
+        direction_node = explored[direction_node]
+        dist += 1
+
+    return (current_node, dist) 

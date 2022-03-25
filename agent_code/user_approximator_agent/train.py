@@ -16,8 +16,12 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 # Events
-FOLLOWED_COMPASS_DIRECTIONS_EVENT = "FOLLOWED_COMPASS_DIRECTIONS"
-# FOLLOWED_CLOSEST_COIN_EVENT = "FOLLOWED_CLOSEST_COIN"
+FOLLOWED_COIN_COMPASS_DIRECTIONS = "FOLLOWED_COIN_COMPASS_DIRECTIONS"
+FOLLOWED_ENEMY_COMPASS_DIRECTIONS = "FOLLOWED_ENEMY_COMPASS_DIRECTIONS"
+CRATES_DESTROYED_1 = "CRATES_DESTROYED_1"
+CRATES_DESTROYED_2 = "CRATES_DESTROYED_2"
+CRATES_DESTROYED_3TO4 = "CRATES_DESTROYED_3TO4"
+CRATES_DESTROYED_5ORMORE = "CRATES_DESTROYED_5ORMORE"
 
 # Temporal difference of N
 TD_N = 4
@@ -53,36 +57,53 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         old_agent_state = game_state_to_feature(self, old_game_state)
         new_agent_state = game_state_to_feature(self, new_game_state)
 
-    """
-    move_actions = ["UP", "DOWN", "LEFT", "RIGHT"]
-    closest_coin_directions = ["closest_coin_up", "closest_coin_down", "closest_coin_left", "closest_coin_right"]
-    if old_agent_state is not None and self_action in move_actions:
-        min_key = ""
-        min_dist = np.inf
+    # Custom rewards
+    if old_game_state is not None:
 
-        for key in closest_coin_directions:
-            if old_agent_state[key][0] != -1 and old_agent_state[key][0] < min_dist:
-                min_key = key
-                min_dist = old_agent_state[key][0]
+        """
+        Reward for following the compass directions
+        """
 
-        if self_action == move_actions[closest_coin_directions.index(min_key)]:
-            events.append(FOLLOWED_CLOSEST_COIN_EVENT)
-    """
+        action_to_compass_direction = {
+            "UP": "N",
+            "DOWN": "S",
+            "LEFT": "W",
+            "RIGHT": "E"
+        }
 
-    # Rewarded for following the compass directions
-    action_to_compass_direction = {
-        "UP": "N",
-        "DOWN": "S",
-        "LEFT": "W",
-        "RIGHT": "E"
-    }
+        if (
+            old_agent_state is not None and
+            self_action in action_to_compass_direction.keys()
+        ):
+            if old_agent_state["coin_compass"][0] == action_to_compass_direction[self_action]:
+                events.append(FOLLOWED_COIN_COMPASS_DIRECTIONS)
 
-    if (
-        old_agent_state is not None and
-        self_action in action_to_compass_direction.keys() and
-        old_agent_state["coin_compass"][0] == action_to_compass_direction[self_action]
-    ):
-        events.append(FOLLOWED_COMPASS_DIRECTIONS_EVENT)
+            if old_agent_state["enemy_compass"][0] == action_to_compass_direction[self_action]:
+                events.append(FOLLOWED_ENEMY_COMPASS_DIRECTIONS)
+
+        """
+        Reward proportional to number of crates destroyed
+        """
+
+        num_explodable_crates = old_agent_state["num_explodable_crates"][0]
+        if num_explodable_crates == 1:
+            events.add(CRATES_DESTROYED_1)
+        elif num_explodable_crates == 2:
+            events.add(CRATES_DESTROYED_2)
+        elif 3 <= num_explodable_crates <= 4:
+            events.add(CRATES_DESTROYED_3TO4)
+        elif num_explodable_crates >= 5:
+            events.add(CRATES_DESTROYED_5ORMORE)
+
+        """
+        TODO Ideas: * Add "bomb available" as a feature
+                    * Add reward for waiting next to an explosion if the compass is pointing in that direction
+                    * Reward for blowing up crates on the way to compass?
+                    * Add raw distance features?
+                    * When the agent sets a bomb, he should know he is in danger (maybe just flag
+                      whether he has bomb available?)
+        """
+        ...
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -98,7 +119,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
     # NOTE: We do not retrain the estimator here, because all variables persist
-    #       through multiple routes. This means that our model is retrained every
+    #       through multiple rounds. This means that our model is retrained every
     #       RETRAIN_FREQUENCY rounds. It might happen that the model won't be retrained
     #       in the very last round, hence we lose at max RETRAIN_FREQUENCY-1 rounds.
     #       With this trade-off, we guarantee that the retrain frequency is fixed.
@@ -123,12 +144,16 @@ def reward_from_events(self, events: List[str]) -> int:
         e.INVALID_ACTION: -0.6,
         e.BOMB_DROPPED: -0.5,
         e.WAITED: -0.4,
-        e.CRATE_DESTROYED: 1.5,
         e.GOT_KILLED: -5,
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
         e.KILLED_OPPONENT: 5,
-        FOLLOWED_COMPASS_DIRECTIONS_EVENT: 0.2
+        FOLLOWED_COIN_COMPASS_DIRECTIONS: 0.2,
+        FOLLOWED_ENEMY_COMPASS_DIRECTIONS: 0.2,
+        CRATES_DESTROYED_1: 0.5,
+        CRATES_DESTROYED_2: 0.7,
+        CRATES_DESTROYED_3TO4: 1.1,
+        CRATES_DESTROYED_5ORMORE: 1.4
     }
     reward_sum = 0
     for event in events:
@@ -139,8 +164,9 @@ def reward_from_events(self, events: List[str]) -> int:
 
 
 def retrain_q_estimator(self):
-    # TODO: Log this
-    print("Retraining")
+    self.logger.debug(f"Retraining model (iteration {self.model_iteration})...")
+    print(f"Retraining model (iteration {self.model_iteration})...")
+    self.model_iteration += 1
 
     alpha = 0.2
     gamma = 0.9
