@@ -18,6 +18,7 @@ Transition = namedtuple('Transition',
 # Events
 FOLLOWED_COIN_COMPASS_DIRECTIONS = "FOLLOWED_COIN_COMPASS_DIRECTIONS"
 FOLLOWED_ENEMY_COMPASS_DIRECTIONS = "FOLLOWED_ENEMY_COMPASS_DIRECTIONS"
+FOLLOWED_BOMB_COMPASS_DIRECTIONS = "FOLLOWED_BOMB_COMPASS_DIRECTIONS"
 CRATES_DESTROYED_1 = "CRATES_DESTROYED_1"
 CRATES_DESTROYED_2 = "CRATES_DESTROYED_2"
 CRATES_DESTROYED_3TO4 = "CRATES_DESTROYED_3TO4"
@@ -80,6 +81,9 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
             if old_agent_state["enemy_compass"][0] == action_to_compass_direction[self_action]:
                 events.append(FOLLOWED_ENEMY_COMPASS_DIRECTIONS)
+
+            if old_agent_state["bomb_compass"][0] == action_to_compass_direction[self_action]:
+                events.append(FOLLOWED_BOMB_COMPASS_DIRECTIONS)
 
         """
         Reward proportional to number of crates destroyed
@@ -148,6 +152,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_OPPONENT: 5,
         FOLLOWED_COIN_COMPASS_DIRECTIONS: 0.2,
         FOLLOWED_ENEMY_COMPASS_DIRECTIONS: 0.2,
+        FOLLOWED_BOMB_COMPASS_DIRECTIONS: 0.2,
         CRATES_DESTROYED_1: 0.5,
         CRATES_DESTROYED_2: 0.7,
         CRATES_DESTROYED_3TO4: 1.1,
