@@ -30,7 +30,7 @@ TD_N = 4
 TRANSITION_HISTORY_SIZE = 20000
 
 # Number of rounds before retraining estimator
-RETRAIN_FREQUENCY = 5000
+RETRAIN_FREQUENCY = 100
 
 # The number of samples we take from the transition history
 SAMPLE_SUBSET_SIZE = RETRAIN_FREQUENCY - TD_N + 1
@@ -87,21 +87,19 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
         num_explodable_crates = old_agent_state["num_explodable_crates"][0]
         if num_explodable_crates == 1:
-            events.add(CRATES_DESTROYED_1)
+            events.append(CRATES_DESTROYED_1)
         elif num_explodable_crates == 2:
-            events.add(CRATES_DESTROYED_2)
+            events.append(CRATES_DESTROYED_2)
         elif 3 <= num_explodable_crates <= 4:
-            events.add(CRATES_DESTROYED_3TO4)
+            events.append(CRATES_DESTROYED_3TO4)
         elif num_explodable_crates >= 5:
-            events.add(CRATES_DESTROYED_5ORMORE)
+            events.append(CRATES_DESTROYED_5ORMORE)
 
         """
         TODO Ideas: * Add "bomb available" as a feature
                     * Add reward for waiting next to an explosion if the compass is pointing in that direction
                     * Reward for blowing up crates on the way to compass?
                     * Add raw distance features?
-                    * When the agent sets a bomb, he should know he is in danger (maybe just flag
-                      whether he has bomb available?)
         """
         ...
 

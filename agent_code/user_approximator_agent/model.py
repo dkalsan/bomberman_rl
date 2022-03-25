@@ -34,7 +34,7 @@ class RFAgent():
             n_jobs = config["n_jobs"]
 
         for k, v in categorical_features.items():
-            assert len(v) > 2, f"Unsupported: Categorical feature '{k}' takes less than 2 possible values."
+            assert len(v) >= 2, f"Unsupported: Categorical feature '{k}' takes less than 2 possible values."
 
         self.model = Pipeline([
             ("categorical_transformer", ColumnTransformer(
