@@ -19,6 +19,7 @@ Transition = namedtuple('Transition',
 FOLLOWED_COIN_COMPASS_DIRECTIONS = "FOLLOWED_COIN_COMPASS_DIRECTIONS"
 FOLLOWED_ENEMY_COMPASS_DIRECTIONS = "FOLLOWED_ENEMY_COMPASS_DIRECTIONS"
 FOLLOWED_BOMB_COMPASS_DIRECTIONS = "FOLLOWED_BOMB_COMPASS_DIRECTIONS"
+WAY_TO_COMPASS_NP_BOMBED = "WAY_TO_COMPASS_NP_BOMBED"
 CRATES_DESTROYED_1 = "CRATES_DESTROYED_1"
 CRATES_DESTROYED_2 = "CRATES_DESTROYED_2"
 CRATES_DESTROYED_3TO4 = "CRATES_DESTROYED_3TO4"
@@ -85,7 +86,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         Reward proportional to number of crates destroyed
         """
 
-        if self_action == "BOMB":    
+        if self_action == "BOMB":
             num_explodable_crates = old_agent_state["num_explodable_crates"][0]
             if num_explodable_crates == 1:
                 events.append(CRATES_DESTROYED_1)
@@ -95,13 +96,6 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 events.append(CRATES_DESTROYED_3TO4)
             elif num_explodable_crates >= 5:
                 events.append(CRATES_DESTROYED_5ORMORE)
-
-        """
-        TODO Ideas: * Add "bomb available" as a feature
-                    * Add reward for waiting next to an explosion if the compass is pointing in that direction
-                    * Reward for blowing up crates on the way to compass?
-                    * Add raw distance features?
-        """
 
         """
         Reward if an enemy is in a deadend and agent moves towards him
@@ -116,6 +110,29 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 self_action == action
             ):
                 events.append(ENEMY_DEADEND_TRAPPED)
+
+        """
+        Reward for destroying crates to get to the compass location.
+        This makes sense for compass modes where Mannhattan distance is used.
+        """
+
+        others = [xy for (n, s, b, xy) in old_game_state['others']]
+        for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
+            x, y = np.array(old_game_state["self"][3]) + shift
+            if (
+                (old_agent_state["enemy_compass"][0] == compass_direction or
+                 old_agent_state["coin_compass"][0] == compass_direction) and
+                (old_game_state["field"][x, y] == 1 or
+                 (x, y) in others)
+            ):
+                events.append(WAY_TO_COMPASS_NP_BOMBED)
+
+    """
+    TODO Ideas: * Add "bomb available" as a feature
+                * Add reward for waiting next to an explosion if the compass is pointing in that direction
+                * Reward for blowing up crates on the way to compass?
+                * Add raw distance features?
+    """
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -163,6 +180,7 @@ def reward_from_events(self, events: List[str]) -> int:
         FOLLOWED_COIN_COMPASS_DIRECTIONS: 0.2,
         FOLLOWED_ENEMY_COMPASS_DIRECTIONS: 0.2,
         FOLLOWED_BOMB_COMPASS_DIRECTIONS: 0.2,
+        WAY_TO_COMPASS_NP_BOMBED: 0.3,
         CRATES_DESTROYED_1: 0.5,
         CRATES_DESTROYED_2: 0.7,
         CRATES_DESTROYED_3TO4: 1.1,
