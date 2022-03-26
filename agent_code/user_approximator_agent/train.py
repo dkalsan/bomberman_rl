@@ -84,16 +84,17 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         """
         Reward proportional to number of crates destroyed
         """
-    
-        num_explodable_crates = old_agent_state["num_explodable_crates"][0]
-        if num_explodable_crates == 1:
-            events.append(CRATES_DESTROYED_1)
-        elif num_explodable_crates == 2:
-            events.append(CRATES_DESTROYED_2)
-        elif 3 <= num_explodable_crates <= 4:
-            events.append(CRATES_DESTROYED_3TO4)
-        elif num_explodable_crates >= 5:
-            events.append(CRATES_DESTROYED_5ORMORE)
+
+        if self_action == "BOMB":    
+            num_explodable_crates = old_agent_state["num_explodable_crates"][0]
+            if num_explodable_crates == 1:
+                events.append(CRATES_DESTROYED_1)
+            elif num_explodable_crates == 2:
+                events.append(CRATES_DESTROYED_2)
+            elif 3 <= num_explodable_crates <= 4:
+                events.append(CRATES_DESTROYED_3TO4)
+            elif num_explodable_crates >= 5:
+                events.append(CRATES_DESTROYED_5ORMORE)
 
         """
         TODO Ideas: * Add "bomb available" as a feature
