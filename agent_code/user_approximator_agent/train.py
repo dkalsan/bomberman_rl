@@ -29,24 +29,19 @@ ENEMY_DEADEND_TRAPPED = "ENEMY_DEADEND_TRAPPED"
 TD_N = 4
 
 # Represents the memory replay size
-TRANSITION_HISTORY_SIZE = 20000
+TRANSITION_HISTORY_SIZE = 100000
 
 # Number of rounds before retraining estimator
-RETRAIN_FREQUENCY = 100
+RETRAIN_FREQUENCY = 10000
 
 # The number of samples we take from the transition history
-SAMPLE_SUBSET_SIZE = RETRAIN_FREQUENCY - TD_N + 1
+SAMPLE_SUBSET_SIZE = 50000
 
 
 def setup_training(self):
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
     self.model_iteration = 1
     self.retrain_counter = 0
-    assert (SAMPLE_SUBSET_SIZE <= (RETRAIN_FREQUENCY - TD_N + 1)), \
-        "In the first estimator retrain there are only" \
-        " (RETRAIN_FREQUENCY - TD_N + 1) valid samples in the transition" \
-        " buffer, because the last TD_N did not collect all the" \
-        " rewards yet."
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -106,7 +101,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                     * Reward for blowing up crates on the way to compass?
                     * Add raw distance features?
         """
-        
+
         """
         Reward if an enemy is in a deadend and agent moves towards him
         """
@@ -114,11 +109,12 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         routes = ["tile_up_route", "tile_down_route", "tile_left_route", "tile_right_route"]
 
         for enemy_dir, route, action in zip(["N", "S", "E", "W"], routes, ['UP', 'DOWN', 'LEFT', 'RIGHT']):
-            if old_agent_state["enemy_compass"] == enemy_dir \
-                and old_agent_state[route] in ["shallow-deadend", "l-shallow-deadend", "deep-deadend"] \
-                and self_action == action:
+            if (
+                old_agent_state["enemy_compass"][0] == enemy_dir and
+                old_agent_state[route][0] in ["shallow-deadend", "l-shallow-deadend", "deep-deadend"] and
+                self_action == action
+            ):
                 events.append(ENEMY_DEADEND_TRAPPED)
-
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -127,7 +123,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     self.retrain_counter += 1
 
-    if self.retrain_counter == RETRAIN_FREQUENCY and len(self.transitions) >= SAMPLE_SUBSET_SIZE:
+    if self.retrain_counter >= RETRAIN_FREQUENCY and len(self.transitions) >= (SAMPLE_SUBSET_SIZE + TD_N - 1):
         retrain_q_estimator(self)
         self.retrain_counter = 0
 
