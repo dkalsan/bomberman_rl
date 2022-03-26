@@ -29,13 +29,13 @@ ENEMY_DEADEND_TRAPPED = "ENEMY_DEADEND_TRAPPED"
 TD_N = 4
 
 # Represents the memory replay size
-TRANSITION_HISTORY_SIZE = 100000
+TRANSITION_HISTORY_SIZE = 20000
 
 # Number of rounds before retraining estimator
-RETRAIN_FREQUENCY = 10000
+RETRAIN_FREQUENCY = 5000
 
 # The number of samples we take from the transition history
-SAMPLE_SUBSET_SIZE = 50000
+SAMPLE_SUBSET_SIZE = 10000
 
 
 def setup_training(self):
@@ -84,7 +84,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         """
         Reward proportional to number of crates destroyed
         """
-
+    
         num_explodable_crates = old_agent_state["num_explodable_crates"][0]
         if num_explodable_crates == 1:
             events.append(CRATES_DESTROYED_1)
@@ -106,7 +106,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         Reward if an enemy is in a deadend and agent moves towards him
         """
 
-        routes = ["tile_up_route", "tile_down_route", "tile_left_route", "tile_right_route"]
+        routes = ["tile_up", "tile_down", "tile_left", "tile_right"]
 
         for enemy_dir, route, action in zip(["N", "S", "E", "W"], routes, ['UP', 'DOWN', 'LEFT', 'RIGHT']):
             if (

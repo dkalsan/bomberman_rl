@@ -21,15 +21,14 @@ def setup(self):
                 "coin_compass": ["N", "S", "W", "E", "NP"],
                 "enemy_compass": ["N", "S", "W", "E", "NP"],
                 "bomb_compass": ["N", "S", "W", "E", "NP"],
-                "current_tile": ["safe", "danger"],
-                "tile_up": ['free_tile', 'coin', 'invalid', 'explodable'],
-                "tile_down": ['free_tile', 'coin', 'invalid', 'explodable'],
-                "tile_left": ['free_tile', 'coin', 'invalid', 'explodable'],
-                "tile_right": ['free_tile', 'coin', 'invalid', 'explodable'],
-                "tile_up_route": ["invalid", "loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend"],
-                "tile_down_route": ["invalid", "loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend"],
-                "tile_left_route": ["invalid", "loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend"],
-                "tile_right_route": ["invalid", "loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend"]
+                "tile_up": ["loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend",
+                            "coin", "invalid", "explodable"],
+                "tile_down": ["loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend",
+                              "coin", "invalid", "explodable"],
+                "tile_left": ["loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend",
+                              "coin", "invalid", "explodable"],
+                "tile_right": ["loop", "shallow-deadend", "l-shallow-deadend", "deep-deadend",
+                               "coin", "invalid", "explodable"]
             },
             actions=['UP', 'DOWN', 'LEFT', 'RIGHT', 'WAIT', 'BOMB'],
             config={
@@ -169,21 +168,35 @@ def game_state_to_feature(self, game_state):
                   (x-1, y),  # LEFT
                   (x+1, y)]  # RIGHT
 
-    feature_keys = ["tile_up_route", "tile_down_route", "tile_left_route", "tile_right_route"]
+    feature_keys = ["tile_up", "tile_down", "tile_left", "tile_right"]
     for (key, d) in zip(feature_keys, directions):
-        furthest_node, dist = deadend_breadth_first_search(free_space, (x, y), d)
 
-        if furthest_node is None:
-            agent_state[key] = ["invalid"]
-        elif furthest_node == (x, y):
-            agent_state[key] = ["loop"]
-        elif dist <= 3:
-            if furthest_node[0] == x or furthest_node[1] == y:
-                agent_state[key] = ["shallow-deadend"]
+        if d in coins:
+            agent_state[key] = ["coin"]
+
+        # Crates and opponents
+        elif (arena[d] == 1) or (d in others):
+            agent_state[key] = ["explodable"]
+
+        # Free tile, compute the route feature
+        elif (arena[d] == 0) and not (d in bomb_locations):
+            furthest_node, dist = deadend_breadth_first_search(free_space, (x, y), d)
+
+            if furthest_node is None:
+                agent_state[key] = ["invalid"]
+            elif furthest_node == (x, y):
+                agent_state[key] = ["loop"]
+            elif dist <= 3:
+                if furthest_node[0] == x or furthest_node[1] == y:
+                    agent_state[key] = ["shallow-deadend"]
+                else:
+                    agent_state[key] = ["l-shallow-deadend"]
             else:
-                agent_state[key] = ["l-shallow-deadend"]
+                agent_state[key] = ["deep-deadend"]
+
+        # Not walkable (wall + bomb)
         else:
-            agent_state[key] = ["deep-deadend"]
+            agent_state[key] = ["invalid"]
 
     """
     Compute direction to the bomb if we are in blast-zone,
@@ -194,21 +207,11 @@ def game_state_to_feature(self, game_state):
     agent_state["bomb_compass"] = [ticking_bomb_direction]
 
     """
-    Compute current tile feature
-    """
-    if (x, y) in bomb_locations:
-        agent_state["current_tile"] = ["danger"]
-    else:
-        agent_state["current_tile"] = ["safe"]
-
-    """
-    Compute danger level for neighboring tiles
+    Compute danger level for current and neighboring tiles
     """
     # {0, 1, 2, 3} bomb ticking
     # {-1} how many more steps explosion is present
     # {5} no bombs or explosions
-
-    # TODO: Test
 
     danger_map = bomb_map.copy()
     danger_map[explosion_map > 0] = -explosion_map[explosion_map > 0]
@@ -217,24 +220,7 @@ def game_state_to_feature(self, game_state):
     for (key, d) in zip(feature_keys, directions):
         agent_state[key] = [danger_map[d]]
 
-    """
-    Compute 'tile_*' features
-    """
-
-    feature_keys = ["tile_up", "tile_down", "tile_left", "tile_right"]
-    for (key, d) in zip(feature_keys, directions):
-        if d in coins:
-            agent_state[key] = ["coin"]
-
-        # Crates and opponents
-        elif (arena[d] == 1) or (d in others):
-            agent_state[key] = ["explodable"]
-
-        elif (arena[d] == 0) and not (d in bomb_locations):
-            agent_state[key] = ["free_tile"]
-
-        else:
-            agent_state[key] = ["invalid"]
+    agent_state["tile_current"] = [danger_map[(x, y)]]
 
     """
     Create a pd.DataFrame which can then be fed directly into the model
