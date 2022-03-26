@@ -23,7 +23,7 @@ CRATES_DESTROYED_1 = "CRATES_DESTROYED_1"
 CRATES_DESTROYED_2 = "CRATES_DESTROYED_2"
 CRATES_DESTROYED_3TO4 = "CRATES_DESTROYED_3TO4"
 CRATES_DESTROYED_5ORMORE = "CRATES_DESTROYED_5ORMORE"
-ENEMY_DEADEND_TRAPPED = "ENEMY_DEADEND_TRAPPED"
+ENEMY_POSSIBLY_TRAPPED = "ENEMY_POSSIBLY_TRAPPED"
 
 # Temporal difference of N
 TD_N = 4
@@ -115,7 +115,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 old_agent_state[route][0] in ["shallow-deadend", "l-shallow-deadend", "deep-deadend"] and
                 self_action == action
             ):
-                events.append(ENEMY_DEADEND_TRAPPED)
+                events.append(ENEMY_POSSIBLY_TRAPPED)
 
     self.transitions.append(Transition(old_agent_state,
                                        self_action,
@@ -167,7 +167,7 @@ def reward_from_events(self, events: List[str]) -> int:
         CRATES_DESTROYED_2: 0.7,
         CRATES_DESTROYED_3TO4: 1.1,
         CRATES_DESTROYED_5ORMORE: 1.4,
-        ENEMY_DEADEND_TRAPPED: 1
+        ENEMY_POSSIBLY_TRAPPED: 0.5
     }
     reward_sum = 0
     for event in events:
