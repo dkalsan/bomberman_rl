@@ -116,16 +116,17 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         This makes sense for compass modes where Mannhattan distance is used.
         """
 
-        others = [xy for (n, s, b, xy) in old_game_state['others']]
-        for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
-            x, y = np.array(old_game_state["self"][3]) + shift
-            if (
-                (old_agent_state["enemy_compass"][0] == compass_direction or
-                 old_agent_state["coin_compass"][0] == compass_direction) and
-                (old_game_state["field"][x, y] == 1 or
-                 (x, y) in others)
-            ):
-                events.append(WAY_TO_COMPASS_NP_BOMBED)
+        if self_action == "BOMB":
+            others = [xy for (n, s, b, xy) in old_game_state['others']]
+            for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
+                x, y = np.array(old_game_state["self"][3]) + shift
+                if (
+                    (old_agent_state["enemy_compass"][0] == compass_direction or
+                        old_agent_state["coin_compass"][0] == compass_direction) and
+                    (old_game_state["field"][x, y] == 1 or
+                        (x, y) in others)
+                ):
+                    events.append(WAY_TO_COMPASS_NP_BOMBED)
 
     """
     TODO Ideas: * Add "bomb available" as a feature
