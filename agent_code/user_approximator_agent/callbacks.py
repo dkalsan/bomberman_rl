@@ -150,12 +150,12 @@ def game_state_to_feature(self, game_state):
     """
 
     # The model can see which one is closer to it
-    agent_state["coin_enemy_dist_diff"] = [coin_dist - enemy_dist]
+    # agent_state["coin_enemy_dist_diff"] = [coin_dist - enemy_dist]
 
     # Useful for picking up coins in dead-ends.
     # If greater than 0, our agent can get in and out
     # of the dead end before an enemy can reach the entrance.
-    agent_state["deadend_coin_enemy_dist_diff"] = [2*coin_dist - enemy_dist]
+    # agent_state["deadend_coin_enemy_dist_diff"] = [2*coin_dist - enemy_dist]
 
     """
     Compute deadend feature for trapping and escape purposes.

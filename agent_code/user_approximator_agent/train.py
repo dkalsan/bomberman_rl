@@ -69,6 +69,13 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             "RIGHT": "E"
         }
 
+        action_to_bomb_compass_direction = {
+            "DOWN": "N",
+            "UP": "S",
+            "RIGHT": "W",
+            "LEFT": "E"
+        }
+
         if (
             old_agent_state is not None and
             self_action in action_to_compass_direction.keys()
@@ -79,7 +86,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             if old_agent_state["enemy_compass"][0] == action_to_compass_direction[self_action]:
                 events.append(FOLLOWED_ENEMY_COMPASS_DIRECTIONS)
 
-            if old_agent_state["bomb_compass"][0] == action_to_compass_direction[self_action]:
+            if old_agent_state["bomb_compass"][0] == action_to_bomb_compass_direction[self_action]:
                 events.append(FOLLOWED_BOMB_COMPASS_DIRECTIONS)
 
         """
