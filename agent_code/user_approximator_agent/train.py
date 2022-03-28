@@ -193,7 +193,7 @@ def reward_from_events(self, events: List[str]) -> int:
         CRATES_DESTROYED_2: 0.7,
         CRATES_DESTROYED_3TO4: 1.1,
         CRATES_DESTROYED_5ORMORE: 1.4,
-        ENEMY_POSSIBLY_TRAPPED: 0.5
+        ENEMY_POSSIBLY_TRAPPED: 0.3
     }
     reward_sum = 0
     for event in events:
