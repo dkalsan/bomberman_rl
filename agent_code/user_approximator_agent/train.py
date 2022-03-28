@@ -93,7 +93,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         Reward proportional to number of crates destroyed
         """
 
-        if self_action == "BOMB":
+        if self_action == "BOMB" and old_game_state["self"][2] is True:
             num_explodable_crates = old_agent_state["num_explodable_crates"][0]
             if num_explodable_crates == 1:
                 events.append(CRATES_DESTROYED_1)
@@ -123,7 +123,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         This makes sense for compass modes where Mannhattan distance is used.
         """
 
-        if self_action == "BOMB":
+        if self_action == "BOMB" and old_game_state["self"][2] is True:
             others = [xy for (n, s, b, xy) in old_game_state['others']]
             for compass_direction, shift in zip(["N", "S", "E", "W"], [[0, -1], [0, 1], [1, 0], [-1, 0]]):
                 x, y = np.array(old_game_state["self"][3]) + shift
@@ -185,9 +185,9 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
         e.KILLED_OPPONENT: 5,
-        FOLLOWED_COIN_COMPASS_DIRECTIONS: 0.2,
-        FOLLOWED_ENEMY_COMPASS_DIRECTIONS: 0.2,
-        FOLLOWED_BOMB_COMPASS_DIRECTIONS: 0.2,
+        FOLLOWED_COIN_COMPASS_DIRECTIONS: 0.1,
+        FOLLOWED_ENEMY_COMPASS_DIRECTIONS: 0.1,
+        FOLLOWED_BOMB_COMPASS_DIRECTIONS: 0.1,
         WAY_TO_COMPASS_NP_BOMBED: 0.3,
         CRATES_DESTROYED_1: 0.5,
         CRATES_DESTROYED_2: 0.7,

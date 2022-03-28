@@ -56,7 +56,7 @@ def act(self, game_state: dict) -> str:
     epsilon_decay = 0.999
     epsilon_min = 0.01
     epsilon = max(epsilon_min,
-                  epsilon_initial * epsilon_decay**(game_state["round"]-1))
+                  epsilon_initial * epsilon_decay**((game_state["round"] // 3)-1))
 
     # Act randomly according to epsilon-greedy
     if self.train and random.random() < epsilon:
