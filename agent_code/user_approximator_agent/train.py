@@ -30,13 +30,13 @@ ENEMY_DEADEND_TRAPPED = "ENEMY_DEADEND_TRAPPED"
 TD_N = 4
 
 # Represents the memory replay size
-TRANSITION_HISTORY_SIZE = 20000
+TRANSITION_HISTORY_SIZE = 50000
 
 # Number of rounds before retraining estimator
-RETRAIN_FREQUENCY = 5000
+RETRAIN_FREQUENCY = 10000
 
 # The number of samples we take from the transition history
-SAMPLE_SUBSET_SIZE = 10000
+SAMPLE_SUBSET_SIZE = 25000
 
 
 def setup_training(self):
