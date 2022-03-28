@@ -287,7 +287,7 @@ def update_q_table(self, origin_state_ix, action):
     N must be strictly greater or equal to 1.
     """
 
-    alpha = 0.08
+    alpha = 0.02
     gamma = 0.9
 
     _, _, end_state_ix, _ = self.transitions[-1]
