@@ -25,18 +25,20 @@ CRATES_DESTROYED_2 = "CRATES_DESTROYED_2"
 CRATES_DESTROYED_3TO4 = "CRATES_DESTROYED_3TO4"
 CRATES_DESTROYED_5ORMORE = "CRATES_DESTROYED_5ORMORE"
 ENEMY_POSSIBLY_TRAPPED = "ENEMY_POSSIBLY_TRAPPED"
+IGNORED_ENEMY_POSSIBLY_TRAPPED = "IGNORED_ENEMY_POSSIBLY_TRAPPED"
+STANDING_ON_TICKING_FIELD = "STANDING_ON_TICKING_FIELD"
 
 # Temporal difference of N
 TD_N = 4
 
 # Represents the memory replay size
-TRANSITION_HISTORY_SIZE = 50000
+TRANSITION_HISTORY_SIZE = 100000
 
 # Number of rounds before retraining estimator
-RETRAIN_FREQUENCY = 10000
+RETRAIN_FREQUENCY = 2500
 
 # The number of samples we take from the transition history
-SAMPLE_SUBSET_SIZE = 25000
+SAMPLE_SUBSET_SIZE = 50000
 
 
 def setup_training(self):
@@ -62,32 +64,34 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         Reward for following the compass directions
         """
 
-        action_to_compass_direction = {
-            "UP": "N",
-            "DOWN": "S",
-            "LEFT": "W",
-            "RIGHT": "E"
-        }
+        if e.INVALID_ACTION not in events:
 
-        action_to_bomb_compass_direction = {
-            "DOWN": "N",
-            "UP": "S",
-            "RIGHT": "W",
-            "LEFT": "E"
-        }
+            action_to_compass_direction = {
+                "UP": "N",
+                "DOWN": "S",
+                "LEFT": "W",
+                "RIGHT": "E"
+            }
 
-        if (
-            old_agent_state is not None and
-            self_action in action_to_compass_direction.keys()
-        ):
-            if old_agent_state["coin_compass"][0] == action_to_compass_direction[self_action]:
-                events.append(FOLLOWED_COIN_COMPASS_DIRECTIONS)
+            action_to_bomb_compass_direction = {
+                "DOWN": "N",
+                "UP": "S",
+                "RIGHT": "W",
+                "LEFT": "E"
+            }
 
-            if old_agent_state["enemy_compass"][0] == action_to_compass_direction[self_action]:
-                events.append(FOLLOWED_ENEMY_COMPASS_DIRECTIONS)
+            if (
+                old_agent_state is not None and
+                self_action in action_to_compass_direction.keys()
+            ):
+                if old_agent_state["coin_compass"][0] == action_to_compass_direction[self_action]:
+                    events.append(FOLLOWED_COIN_COMPASS_DIRECTIONS)
 
-            if old_agent_state["bomb_compass"][0] == action_to_bomb_compass_direction[self_action]:
-                events.append(FOLLOWED_BOMB_COMPASS_DIRECTIONS)
+                if old_agent_state["enemy_compass"][0] == action_to_compass_direction[self_action]:
+                    events.append(FOLLOWED_ENEMY_COMPASS_DIRECTIONS)
+
+                if old_agent_state["bomb_compass"][0] == action_to_bomb_compass_direction[self_action]:
+                    events.append(FOLLOWED_BOMB_COMPASS_DIRECTIONS)
 
         """
         Reward proportional to number of crates destroyed
@@ -105,18 +109,31 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 events.append(CRATES_DESTROYED_5ORMORE)
 
         """
-        Reward if an enemy is in a deadend and agent moves towards him
+        Reward if an enemy is in a deadend and agent moves towards him.
+        Penalize for ignoring the information. The goal is to incentivize
+        our agent to move into deadends until next to an enemy and then setting
+        a bomb.
         """
 
-        routes = ["tile_up", "tile_down", "tile_left", "tile_right"]
+        routes = ["tile_up", "tile_down", "tile_right", "tile_left"]
 
-        for enemy_dir, route, action in zip(["N", "S", "E", "W"], routes, ['UP', 'DOWN', 'LEFT', 'RIGHT']):
+        for enemy_dir, route, action in zip(["N", "S", "E", "W"], routes, ['UP', 'DOWN', 'RIGHT', 'LEFT']):
             if (
                 old_agent_state["enemy_compass"][0] == enemy_dir and
-                old_agent_state[route][0] in ["shallow-deadend", "l-shallow-deadend", "deep-deadend"] and
-                self_action == action
+                old_agent_state[route][0] in ["shallow-deadend", "l-shallow-deadend", "deep-deadend"]
             ):
-                events.append(ENEMY_POSSIBLY_TRAPPED)
+                if self_action == action and e.INVALID_ACTION not in events:
+                    events.append(ENEMY_POSSIBLY_TRAPPED)
+                else:
+                    events.append(IGNORED_ENEMY_POSSIBLY_TRAPPED)
+
+            if (
+                old_agent_state["enemy_compass"][0] == enemy_dir and
+                old_agent_state[route][0] == "explodable" and
+                self_action != "BOMB" and
+                old_game_state["self"][2] is True
+            ):
+                events.append(IGNORED_ENEMY_POSSIBLY_TRAPPED)
 
         """
         Reward for destroying crates to get to the compass location.
@@ -134,6 +151,13 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                         (x, y) in others)
                 ):
                     events.append(WAY_TO_COMPASS_NP_BOMBED)
+
+        """
+        Penalize for standing on a ticking field
+        """
+
+        if 0 <= old_agent_state["tile_current"][0] < 5:
+            events.append(STANDING_ON_TICKING_FIELD)
 
     """
     TODO Ideas: * Add "bomb available" as a feature
@@ -179,7 +203,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_RIGHT: -0.1,
         e.MOVED_LEFT: -0.1,
         e.INVALID_ACTION: -0.6,
-        e.BOMB_DROPPED: -0.5,
+        e.BOMB_DROPPED: -0.3,
         e.WAITED: -0.4,
         e.GOT_KILLED: -5,
         e.KILLED_SELF: -3,
@@ -187,13 +211,15 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_OPPONENT: 5,
         FOLLOWED_COIN_COMPASS_DIRECTIONS: 0.1,
         FOLLOWED_ENEMY_COMPASS_DIRECTIONS: 0.1,
-        FOLLOWED_BOMB_COMPASS_DIRECTIONS: 0.1,
-        WAY_TO_COMPASS_NP_BOMBED: 0.3,
+        FOLLOWED_BOMB_COMPASS_DIRECTIONS: 0.2,
+        WAY_TO_COMPASS_NP_BOMBED: 0.8,
         CRATES_DESTROYED_1: 0.5,
         CRATES_DESTROYED_2: 0.7,
         CRATES_DESTROYED_3TO4: 1.1,
         CRATES_DESTROYED_5ORMORE: 1.4,
-        ENEMY_POSSIBLY_TRAPPED: 0.3
+        ENEMY_POSSIBLY_TRAPPED: 0.2,
+        IGNORED_ENEMY_POSSIBLY_TRAPPED: -0.2,
+        STANDING_ON_TICKING_FIELD: -0.2
     }
     reward_sum = 0
     for event in events:
@@ -208,7 +234,7 @@ def retrain_q_estimator(self):
     print(f"Retraining model (iteration {self.model_iteration})...")
     self.model_iteration += 1
 
-    alpha = 0.2
+    alpha = 0.1
     gamma = 0.9
 
     # NOTE: We ignore last TD_N-1 transitions, because we did not collect the
