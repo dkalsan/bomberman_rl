@@ -64,34 +64,34 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         Reward for following the compass directions
         """
 
-        if e.INVALID_ACTION not in events:
+        # if e.INVALID_ACTION not in events:
 
-            action_to_compass_direction = {
-                "UP": "N",
-                "DOWN": "S",
-                "LEFT": "W",
-                "RIGHT": "E"
-            }
+        #     action_to_compass_direction = {
+        #         "UP": "N",
+        #         "DOWN": "S",
+        #         "LEFT": "W",
+        #         "RIGHT": "E"
+        #     }
 
-            action_to_bomb_compass_direction = {
-                "DOWN": "N",
-                "UP": "S",
-                "RIGHT": "W",
-                "LEFT": "E"
-            }
+        #     action_to_bomb_compass_direction = {
+        #         "DOWN": "N",
+        #         "UP": "S",
+        #         "RIGHT": "W",
+        #         "LEFT": "E"
+        #     }
 
-            if (
-                old_agent_state is not None and
-                self_action in action_to_compass_direction.keys()
-            ):
-                if old_agent_state["coin_compass"][0] == action_to_compass_direction[self_action]:
-                    events.append(FOLLOWED_COIN_COMPASS_DIRECTIONS)
+        #     if (
+        #         old_agent_state is not None and
+        #         self_action in action_to_compass_direction.keys()
+        #     ):
+        #         if old_agent_state["coin_compass"][0] == action_to_compass_direction[self_action]:
+        #             events.append(FOLLOWED_COIN_COMPASS_DIRECTIONS)
 
-                if old_agent_state["enemy_compass"][0] == action_to_compass_direction[self_action]:
-                    events.append(FOLLOWED_ENEMY_COMPASS_DIRECTIONS)
+        #         if old_agent_state["enemy_compass"][0] == action_to_compass_direction[self_action]:
+        #             events.append(FOLLOWED_ENEMY_COMPASS_DIRECTIONS)
 
-                if old_agent_state["bomb_compass"][0] == action_to_bomb_compass_direction[self_action]:
-                    events.append(FOLLOWED_BOMB_COMPASS_DIRECTIONS)
+        #         if old_agent_state["bomb_compass"][0] == action_to_bomb_compass_direction[self_action]:
+        #             events.append(FOLLOWED_BOMB_COMPASS_DIRECTIONS)
 
         """
         Reward proportional to number of crates destroyed
@@ -209,10 +209,10 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_SELF: -3,
         e.SURVIVED_ROUND: 1.5,
         e.KILLED_OPPONENT: 5,
-        FOLLOWED_COIN_COMPASS_DIRECTIONS: 0.1,
-        FOLLOWED_ENEMY_COMPASS_DIRECTIONS: 0.1,
-        FOLLOWED_BOMB_COMPASS_DIRECTIONS: 0.2,
-        WAY_TO_COMPASS_NP_BOMBED: 0.8,
+        # FOLLOWED_COIN_COMPASS_DIRECTIONS: 0.1,
+        # FOLLOWED_ENEMY_COMPASS_DIRECTIONS: 0.1,
+        # FOLLOWED_BOMB_COMPASS_DIRECTIONS: 0.2,
+        WAY_TO_COMPASS_NP_BOMBED: 0.5,
         CRATES_DESTROYED_1: 0.5,
         CRATES_DESTROYED_2: 0.7,
         CRATES_DESTROYED_3TO4: 1.1,
